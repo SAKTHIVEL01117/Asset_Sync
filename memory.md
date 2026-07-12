@@ -31,10 +31,11 @@ This file serves as the durable memory checkpoint for the AssetSync project. It 
 * Logged in and linked the repository to the InsForge project `AssetSync` (`40fc81d0-0a59-4ed0-b86f-5d08bff77da6`).
 * Installed the `@insforge/sdk` package for the Next.js app.
 * Configured local environment variables in `.env.local` using the project's anon key retrieved from InsForge secrets.
-* Created SDK integration clients ([client.ts](file:///D:/projects/designs/Asset_Sync/app/lib/insforge/client.ts) and [server.ts](file:///D:/projects/designs/Asset_Sync/app/lib/insforge/server.ts)), session refresh route ([route.ts](file:///D:/projects/designs/Asset_Sync/app/api/auth/refresh/route.ts)), and Next.js 16+ session refresh [proxy.ts](file:///D:/projects/designs/Asset_Sync/proxy.ts).
-* Developed Server Actions in [actions.ts](file:///D:/projects/designs/Asset_Sync/app/actions.ts) for sign-in, sign-up, sign-out, OTP verification (required by project metadata), and social OAuth logins.
-* Designed a premium, responsive sign-in/sign-up/verification dashboard page in [page.tsx](file:///D:/projects/designs/Asset_Sync/app/login/page.tsx) with interactive modes, OTP code entry, and Google/GitHub login buttons.
-* Created the OAuth redirect callback route in [route.ts](file:///D:/projects/designs/Asset_Sync/app/api/auth/callback/route.ts) to securely exchange codes for sessions.
+* Created SDK integration clients ([client.ts](file:///C:/Users/sakth/OneDrive/Desktop/assetsync/app/lib/insforge/client.ts) and [server.ts](file:///C:/Users/sakth/OneDrive/Desktop/assetsync/app/lib/insforge/server.ts)), session refresh route ([route.ts](file:///C:/Users/sakth/OneDrive/Desktop/assetsync/app/api/auth/refresh/route.ts)), and Next.js 16+ session refresh [proxy.ts](file:///C:/Users/sakth/OneDrive/Desktop/assetsync/proxy.ts).
+* Developed Server Actions in [actions.ts](file:///C:/Users/sakth/OneDrive/Desktop/assetsync/app/actions.ts) for sign-in, sign-up, sign-out, OTP verification (required by project metadata), and social OAuth logins.
+* Designed a premium, responsive sign-in/sign-up/verification dashboard page in [page.tsx](file:///C:/Users/sakth/OneDrive/Desktop/assetsync/app/login/page.tsx) with interactive modes, OTP code entry, and Google/GitHub login buttons.
+* Created the OAuth redirect callback route in [route.ts](file:///C:/Users/sakth/OneDrive/Desktop/assetsync/app/api/auth/callback/route.ts) to securely exchange codes for sessions.
+* Fixed an "Invalid URL" error during Google/GitHub OAuth logins by correcting `NEXT_PUBLIC_INSFORGE_URL` in `.env.local` to point to the backend URL instead of the CLI integration API key.
 * Verified that the full Next.js production build (`npm run build`) compiles with zero errors and warnings.
 
 #### 04. Role-Based Access Control, 05. Database Schema & 06. Organization Setup
@@ -43,9 +44,9 @@ This file serves as the durable memory checkpoint for the AssetSync project. It 
 * Wrote `public.get_current_user_role()` function using `SECURITY DEFINER` to securely inspect user roles without recursion.
 * Guarded employee roles and status fields from escalation via a `BEFORE UPDATE` trigger on `public.employees` that prevents non-admins from modifying role/status columns.
 * Connected user registrations to the database using an `AFTER INSERT` trigger on `auth.users` to automatically create an employee record with the `admin` role for the first signup and `employee` for subsequent ones.
-* Developed the main navigation component [Navbar.tsx](file:///D:/projects/designs/Asset_Sync/app/components/Navbar.tsx) mapping authenticated pages to user roles.
-* Created the `/organization` dashboard page in [page.tsx](file:///D:/projects/designs/Asset_Sync/app/organization/page.tsx) with interactive subviews and modals for managing departments, categories, and employees.
-* Created a clean operational portal landing page in [page.tsx](file:///D:/projects/designs/Asset_Sync/app/dashboard/page.tsx).
+* Developed the main navigation component [Navbar.tsx](file:///C:/Users/sakth/OneDrive/Desktop/assetsync/app/components/Navbar.tsx) mapping authenticated pages to user roles.
+* Created the `/organization` dashboard page in [page.tsx](file:///C:/Users/sakth/OneDrive/Desktop/assetsync/app/organization/page.tsx) with interactive subviews and modals for managing departments, categories, and employees.
+* Created a clean operational portal landing page in [page.tsx](file:///C:/Users/sakth/OneDrive/Desktop/assetsync/app/dashboard/page.tsx).
 * Verified the Next.js 16 build compiles successfully with zero warnings or errors.
 
 ### Phase 2 — Asset Management
