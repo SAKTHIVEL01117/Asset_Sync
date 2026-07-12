@@ -8,9 +8,9 @@ Update this file after every completed feature. Any AI agent reading this should
 
 **Phase:** Phase 1 — Foundation
 
-**Last Completed:** Project Initialization
+**Last Completed:** Homepage Setup & Design
 
-**Next:** Homepage & Authentication
+**Next:** Authentication (Signup & Login)
 
 ---
 
@@ -18,9 +18,10 @@ Update this file after every completed feature. Any AI agent reading this should
 
 ### Phase 1 — Foundation
 
-- [ ] 01 Project Setup
-- [ ] 02 Homepage
+- [x] 01 Project Setup
+- [x] 02 Homepage
 - [ ] 03 Authentication
+
 - [ ] 04 Role-Based Access Control
 - [ ] 05 Database Schema
 - [ ] 06 Organization Setup (Departments, Categories & Employees)
