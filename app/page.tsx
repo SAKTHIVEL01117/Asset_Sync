@@ -1,12 +1,31 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { insforge } from "./lib/insforge/client";
 
 export default function Home() {
+  const router = useRouter();
+
   // FAQ accordion state
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const { data } = await insforge.auth.getCurrentUser();
+        if (data?.user) {
+          router.push("/dashboard");
+        }
+      } catch (err) {
+        console.error("Home auth check failed", err);
+      }
+    }
+    void checkAuth();
+  }, [router]);
+
 
   const toggleFaq = (index: number) => {
     setOpenFaqIndex(openFaqIndex === index ? null : index);
