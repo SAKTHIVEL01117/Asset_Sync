@@ -48,6 +48,17 @@ This file serves as the durable memory checkpoint for the AssetSync project. It 
 * Created a clean operational portal landing page in [page.tsx](file:///D:/projects/designs/Asset_Sync/app/dashboard/page.tsx).
 * Verified the Next.js 16 build compiles successfully with zero warnings or errors.
 
+### Phase 2 — Asset Management
+
+#### 07. Asset Registration Page, 08. Asset Registration Logic, 09. Asset Directory & 10. Asset Details & History
+* Linked local environment to the InsForge project `AssetSync` via CLI to unlock DB operations and schemas.
+* Created and applied database migration `20260712055913_schema-assets.sql` defining the `assets` table, indexes, grants, RLS policies, and trigger for auto-generating sequential asset tags (`AST-XXXX`).
+* Created a public storage bucket named `assets` in InsForge for uploading and hosting asset images and documentation.
+* Built the Asset Directory dashboard at [page.tsx](file:///C:/Users/sakth/OneDrive/Desktop/assetsync/app/assets/page.tsx) with search, category filtering, status filtering, and dual views (Kanban Grid / List Table).
+* Developed an interactive asset registration wizard with metadata validation, dynamic image uploading, and document attachments synced with the InsForge storage bucket.
+* Built the Asset Details page at [page.tsx](file:///C:/Users/sakth/OneDrive/Desktop/assetsync/app/assets/%5Bid%5D/page.tsx) displaying complete physical specs, uploaded file previews, and logs for allocation, maintenance, and audits.
+* Restored all missing npm dependencies (`@insforge/sdk`) and verified that the entire Next.js production build (`npm run build`) compiles with zero errors or warnings.
+
 ---
 
 ## Active Conventions & Architecture

@@ -6,11 +6,11 @@ Update this file after every completed feature. Any AI agent reading this should
 
 ## Current Status
 
-**Phase:** Phase 1 — Foundation
+**Phase:** Phase 2 — Asset Management
 
-**Last Completed:** Organization Setup (Departments, Categories & Employees)
+**Last Completed:** Asset Registration, Directory, Details, and Storage Upload (07, 08, 09, 10)
 
-**Next:** Asset Registration Page (07)
+**Next:** Asset Lifecycle Management (11)
 
 ---
 
@@ -27,10 +27,10 @@ Update this file after every completed feature. Any AI agent reading this should
 
 ### Phase 2 — Asset Management
 
-- [ ] 07 Asset Registration Page — Full UI
-- [ ] 08 Asset Registration Logic
-- [ ] 09 Asset Directory
-- [ ] 10 Asset Details & History
+- [x] 07 Asset Registration Page — Full UI
+- [x] 08 Asset Registration Logic
+- [x] 09 Asset Directory
+- [x] 10 Asset Details & History
 - [ ] 11 Asset Lifecycle Management
 
 ### Phase 3 — Allocation & Resource Booking
