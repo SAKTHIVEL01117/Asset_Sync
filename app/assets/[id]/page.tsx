@@ -4,7 +4,7 @@ import React, { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { insforge } from "../../lib/insforge/client";
-import Navbar from "../../components/Navbar";
+import SidebarLayout from "../../components/SidebarLayout";
 
 interface Category {
   id: string;
@@ -239,18 +239,17 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
 
   if (error || !asset) {
     return (
-      <div className="min-h-screen bg-page-background flex flex-col">
-        <Navbar />
-        <main className="max-w-[1440px] mx-auto w-full px-6 py-8 flex-1 flex flex-col items-center justify-center">
-          <div className="bg-white border border-border-default rounded-xl p-8 max-w-md text-center shadow-sm">
-            <h2 className="text-xl font-bold text-danger">Error Loading Asset</h2>
-            <p className="text-text-secondary text-sm pt-2">{error || "Asset not found."}</p>
-            <Link href="/assets" className="mt-5 inline-block px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg shadow-sm">
+      <SidebarLayout activePage="Assets" searchPlaceholder="Search asset details...">
+        <div className="max-w-[1440px] mx-auto text-left flex flex-col items-center justify-center py-12">
+          <div className="bg-white border border-[#E2E8F0] rounded-xl p-8 max-w-md text-center shadow-sm">
+            <h2 className="text-xl font-bold text-[#EF4444]">Error Loading Asset</h2>
+            <p className="text-[#475569] text-sm pt-2">{error || "Asset not found."}</p>
+            <Link href="/assets" className="mt-5 inline-block px-4 py-2 bg-[#3661ED] text-white text-sm font-semibold rounded-lg shadow-sm">
               Back to Directory
             </Link>
           </div>
-        </main>
-      </div>
+        </div>
+      </SidebarLayout>
     );
   }
 
@@ -258,10 +257,8 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
   const currentHolder = employees.find((e) => e.id === asset.current_holder_id);
 
   return (
-    <div className="min-h-screen bg-page-background text-text-primary flex flex-col font-sans">
-      <Navbar />
-
-      <main className="max-w-[1440px] mx-auto w-full px-6 py-8 flex-1">
+    <SidebarLayout activePage="Assets" searchPlaceholder="Search asset details...">
+      <div className="max-w-[1440px] mx-auto text-left">
         {/* Breadcrumb Navigation */}
         <nav className="flex items-center gap-2 text-xs font-semibold text-text-secondary mb-6">
           <Link href="/assets" className="hover:text-primary transition-colors">Assets</Link>
@@ -522,7 +519,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
             </div>
           </div>
         </div>
-      </main>
-    </div>
+      </div>
+    </SidebarLayout>
   );
 }

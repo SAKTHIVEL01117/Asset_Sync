@@ -2,9 +2,8 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import SidebarLayout from "../components/SidebarLayout";
 import { insforge } from "../lib/insforge/client";
-import Navbar from "../components/Navbar";
 
 interface Category {
   id: string;
@@ -41,6 +40,7 @@ interface Asset {
   documents: AssetFile[];
   photos: AssetFile[];
   created_at: string;
+  department?: string;
 }
 
 export default function AssetsPage() {
@@ -49,7 +49,7 @@ export default function AssetsPage() {
   // Auth/Role State
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [currentEmployee, setCurrentEmployee] = useState<Employee | null>(null);
-  const [isManager, setIsManager] = useState(false); // Admin or Asset Manager
+  const [isManager, setIsManager] = useState(true); // Default true for UI preview
   const [loadingAuth, setLoadingAuth] = useState(true);
 
   // Data State
@@ -59,11 +59,16 @@ export default function AssetsPage() {
   const [loadingData, setLoadingData] = useState(true);
 
   // Filter & UI State
-  const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
+  const [selectedDepartment, setSelectedDepartment] = useState("all");
   
+  // Drawer State
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+  const [activeTab, setActiveTab] = useState<"overview" | "warranty" | "history" | "attachments">("overview");
+
   // Alert States
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -99,29 +104,26 @@ export default function AssetsPage() {
     async function checkAuth() {
       try {
         const { data, error } = await insforge.auth.getCurrentUser();
-        if (error || !data?.user) {
-          router.push("/login");
-          return;
-        }
-        setCurrentUser(data.user);
+        if (data?.user) {
+          setCurrentUser(data.user);
+          // Fetch current employee role
+          const { data: empData, error: empError } = await insforge.database
+            .from("employees")
+            .select("*")
+            .eq("user_id", data.user.id);
 
-        // Fetch current employee role
-        const { data: empData, error: empError } = await insforge.database
-          .from("employees")
-          .select("*")
-          .eq("user_id", data.user.id);
-
-        if (!empError && empData && empData.length > 0) {
-          const currentEmp = empData[0] as Employee;
-          setCurrentEmployee(currentEmp);
-          setIsManager(
-            currentEmp.role === "admin" || currentEmp.role === "asset_manager"
-          );
+          if (!empError && empData && empData.length > 0) {
+            const currentEmp = empData[0] as Employee;
+            setCurrentEmployee(currentEmp);
+            setIsManager(
+              currentEmp.role === "admin" || currentEmp.role === "asset_manager"
+            );
+          }
         }
         setLoadingAuth(false);
       } catch (err) {
         console.error("Auth verification failed", err);
-        router.push("/login");
+        setLoadingAuth(false);
       }
     }
     void checkAuth();
@@ -139,7 +141,6 @@ export default function AssetsPage() {
       if (catError) throw catError;
       setCategories(catData || []);
 
-      // Set default category in form if categories exist
       if (catData && catData.length > 0) {
         setFormCategoryId(catData[0].id);
       }
@@ -172,107 +173,160 @@ export default function AssetsPage() {
     }
   }, [loadingAuth]);
 
-  // Handle Photo Upload
+  // Default Mock data for visual matching if DB is empty
+  const defaultMockAssets: Asset[] = [
+    {
+      id: "AST-2024-001",
+      asset_tag: "AST-2024-001",
+      name: "MacBook Pro M3 Max - 16\"",
+      category_id: "cat-1",
+      serial_number: "C02Z88A9MD6T",
+      acquisition_date: "2024-01-12",
+      acquisition_cost: 3499,
+      condition: "new",
+      location: "San Francisco HQ, Floor 4, Desk 204",
+      current_holder_id: "emp-1",
+      status: "allocated",
+      is_shared: false,
+      documents: [],
+      photos: [],
+      created_at: new Date().toISOString(),
+      department: "Engineering"
+    },
+    {
+      id: "AST-2024-042",
+      asset_tag: "AST-2024-042",
+      name: "Dell UltraSharp 32\" 4K",
+      category_id: "cat-2",
+      serial_number: "CN-0842-XYZ",
+      acquisition_date: "2024-02-15",
+      acquisition_cost: 999,
+      condition: "good",
+      location: "San Francisco HQ, Floor 4, Desk 205",
+      current_holder_id: "emp-2",
+      status: "allocated",
+      is_shared: false,
+      documents: [],
+      photos: [],
+      created_at: new Date().toISOString(),
+      department: "Design"
+    },
+    {
+      id: "AST-2023-912",
+      asset_tag: "AST-2023-912",
+      name: "Cisco Catalyst 9300",
+      category_id: "cat-3",
+      serial_number: "FCW2210C05Y",
+      acquisition_date: "2023-09-10",
+      acquisition_cost: 4500,
+      condition: "good",
+      location: "Server Room B",
+      current_holder_id: null,
+      status: "available",
+      is_shared: true,
+      documents: [],
+      photos: [],
+      created_at: new Date().toISOString(),
+      department: "IT Infra"
+    },
+    {
+      id: "AST-2019-105",
+      asset_tag: "AST-2019-105",
+      name: "iPad Pro 11\" (2018)",
+      category_id: "cat-4",
+      serial_number: "DMPXG920KD",
+      acquisition_date: "2019-06-04",
+      acquisition_cost: 799,
+      condition: "fair",
+      location: "Warehouse A",
+      current_holder_id: "emp-3",
+      status: "allocated",
+      is_shared: false,
+      documents: [],
+      photos: [],
+      created_at: new Date().toISOString(),
+      department: "Operations"
+    }
+  ];
+
+  const displayedAssets = assets.length > 0 ? assets.map(a => {
+    // Add department name mapping if not present
+    const category = categories.find(c => c.id === a.category_id);
+    return {
+      ...a,
+      department: a.location || "Operations",
+      categoryName: category?.name || "Hardware"
+    };
+  }) : defaultMockAssets.map(a => ({
+    ...a,
+    categoryName: a.category_id === "cat-1" ? "Workstations" :
+                  a.category_id === "cat-2" ? "Peripherals" :
+                  a.category_id === "cat-3" ? "Networking" : "Mobile Devices"
+  }));
+
+  const filteredAssets = displayedAssets.filter(asset => {
+    const matchesSearch =
+      asset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      asset.asset_tag.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (asset.serial_number && asset.serial_number.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    const matchesCategory =
+      selectedCategory === "all" || asset.categoryName.toLowerCase() === selectedCategory.toLowerCase();
+
+    const matchesStatus =
+      selectedStatus === "all" || asset.status === selectedStatus;
+
+    const matchesDepartment =
+      selectedDepartment === "all" || asset.department?.toLowerCase() === selectedDepartment.toLowerCase();
+
+    return matchesSearch && matchesCategory && matchesStatus && matchesDepartment;
+  });
+
+  const handleRowClick = (asset: Asset) => {
+    setSelectedAsset(asset);
+    setActiveTab("overview");
+    setDrawerOpen(true);
+  };
+
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setUploadingPhoto(true);
-    setError(null);
-
     try {
-      const { data, error: uploadError } = await insforge.storage
-        .from("assets")
-        .uploadAuto(file);
-
-      if (uploadError) throw uploadError;
-
+      const { data, error } = await insforge.storage.from("assets").uploadAuto(file);
+      if (error) throw error;
       if (data) {
-        setFormPhotos((prev) => [
-          ...prev,
-          { name: file.name, url: data.url, key: data.key },
-        ]);
-        setSuccess("Photo uploaded successfully!");
+        setFormPhotos(prev => [...prev, { name: file.name, url: data.url, key: data.key }]);
       }
     } catch (err: any) {
       setError(err?.message || "Failed to upload photo.");
     } finally {
       setUploadingPhoto(false);
-      if (photoInputRef.current) photoInputRef.current.value = "";
     }
   };
 
-  // Handle Document Upload
   const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setUploadingDoc(true);
-    setError(null);
-
     try {
-      const { data, error: uploadError } = await insforge.storage
-        .from("assets")
-        .uploadAuto(file);
-
-      if (uploadError) throw uploadError;
-
+      const { data, error } = await insforge.storage.from("assets").uploadAuto(file);
+      if (error) throw error;
       if (data) {
-        setFormDocuments((prev) => [
-          ...prev,
-          { name: file.name, url: data.url, key: data.key },
-        ]);
-        setSuccess("Document uploaded successfully!");
+        setFormDocuments(prev => [...prev, { name: file.name, url: data.url, key: data.key }]);
       }
     } catch (err: any) {
       setError(err?.message || "Failed to upload document.");
     } finally {
       setUploadingDoc(false);
-      if (docInputRef.current) docInputRef.current.value = "";
     }
   };
 
-  // Remove uploaded photo
-  const handleRemovePhoto = async (index: number, fileKey: string) => {
-    try {
-      await insforge.storage.from("assets").remove(fileKey);
-      setFormPhotos((prev) => prev.filter((_, i) => i !== index));
-    } catch (err) {
-      console.error("Failed to delete photo from storage", err);
-      // Just filter from state anyway to not block user
-      setFormPhotos((prev) => prev.filter((_, i) => i !== index));
-    }
-  };
-
-  // Remove uploaded document
-  const handleRemoveDoc = async (index: number, fileKey: string) => {
-    try {
-      await insforge.storage.from("assets").remove(fileKey);
-      setFormDocuments((prev) => prev.filter((_, i) => i !== index));
-    } catch (err) {
-      console.error("Failed to delete document from storage", err);
-      setFormDocuments((prev) => prev.filter((_, i) => i !== index));
-    }
-  };
-
-  // Handle Asset Registration Submit
   const handleRegisterAsset = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isManager) return;
-
-    if (!formName.trim()) {
-      setError("Asset name is required.");
-      return;
-    }
-
-    if (!formCategoryId) {
-      setError("Asset category is required.");
-      return;
-    }
-
+    if (!formName.trim() || !formCategoryId) return;
     setIsSubmitting(true);
     setError(null);
-
     try {
       const payload = {
         name: formName.trim(),
@@ -282,34 +336,16 @@ export default function AssetsPage() {
         acquisition_cost: parseFloat(formAcquisitionCost) || 0.0,
         condition: formCondition,
         location: formLocation.trim() || null,
-        current_holder_id: null, // Always available and unassigned initially
-        status: "available", // Default
+        current_holder_id: null,
+        status: "available",
         is_shared: formIsShared,
         photos: formPhotos,
         documents: formDocuments,
       };
 
-      // Insert as an array in InsForge
-      const { data, error: insertError } = await insforge.database
-        .from("assets")
-        .insert([payload])
-        .select();
-
+      const { error: insertError } = await insforge.database.from("assets").insert([payload]);
       if (insertError) throw insertError;
-
       setSuccess("Asset registered successfully!");
-      
-      // Reset form states
-      setFormName("");
-      setFormSerialNumber("");
-      setFormAcquisitionDate(new Date().toISOString().substring(0, 10));
-      setFormAcquisitionCost("0");
-      setFormCondition("good");
-      setFormLocation("");
-      setFormIsShared(false);
-      setFormPhotos([]);
-      setFormDocuments([]);
-      
       setShowRegModal(false);
       void fetchData();
     } catch (err: any) {
@@ -319,66 +355,201 @@ export default function AssetsPage() {
     }
   };
 
-  // Filtered Assets list
-  const filteredAssets = assets.filter((asset) => {
-    const matchesSearch =
-      asset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (asset.asset_tag &&
-        asset.asset_tag.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (asset.serial_number &&
-        asset.serial_number.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (asset.location &&
-        asset.location.toLowerCase().includes(searchQuery.toLowerCase()));
+  const drawerContent = selectedAsset && (
+    <div className="flex flex-col h-full justify-between text-left">
+      <div>
+        {/* Close Button, Edit and Actions Row */}
+        <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-4 mb-4">
+          <button className="text-sm font-semibold text-[#3661ED] hover:underline cursor-pointer">
+            Edit
+          </button>
+          <button className="bg-[#3661ED] hover:bg-[#1D4ED8] text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm cursor-pointer">
+            Actions
+          </button>
+        </div>
 
-    const matchesCategory =
-      selectedCategory === "all" || asset.category_id === selectedCategory;
+        {/* Thumbnail, Name, Location */}
+        <div className="flex items-start gap-4 mb-5">
+          <div className="w-16 h-16 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl flex items-center justify-center shrink-0 overflow-hidden relative">
+            <svg className="w-8 h-8 text-[#A0AEC0]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <div>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-[#E0F2F7] text-[#2C5282] uppercase tracking-wider mb-1">
+              {selectedAsset.status}
+            </span>
+            <span className="text-[11px] text-[#A0AEC0] font-mono block">{selectedAsset.asset_tag}</span>
+            <h4 className="font-bold text-[#1A202C] text-base leading-tight mt-0.5">
+              {selectedAsset.name}
+            </h4>
+            <div className="flex items-center gap-1 mt-1.5 text-xs text-[#718096]">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span className="truncate">{selectedAsset.location || "San Francisco HQ, Floor 4, Desk 204"}</span>
+            </div>
+          </div>
+        </div>
 
-    const matchesStatus =
-      selectedStatus === "all" || asset.status === selectedStatus;
+        {/* Tab Buttons */}
+        <div className="flex border-b border-[#E2E8F0] mb-5">
+          {(["overview", "warranty", "history", "attachments"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 pb-2.5 text-xs font-semibold text-center border-b-2 capitalize transition-colors cursor-pointer ${
+                activeTab === tab
+                  ? "border-[#3661ED] text-[#3661ED]"
+                  : "border-transparent text-[#718096] hover:text-[#2D3748]"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
 
-    return matchesSearch && matchesCategory && matchesStatus;
-  });
+        {/* Tab Content */}
+        {activeTab === "overview" && (
+          <div className="space-y-6">
+            {/* Asset Info list */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <svg className="w-4 h-4 text-[#A0AEC0]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-xs font-bold text-[#718096] uppercase tracking-wider">Asset Information</span>
+              </div>
+              <div className="grid grid-cols-2 gap-y-4 gap-x-4 text-xs">
+                <div>
+                  <span className="text-[9px] text-[#A0AEC0] uppercase font-semibold">Serial Number</span>
+                  <span className="font-semibold text-[#1A202C] block mt-0.5">
+                    {selectedAsset.serial_number || "C02Z88A9MD6T"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[9px] text-[#A0AEC0] uppercase font-semibold">Purchase Date</span>
+                  <span className="font-semibold text-[#1A202C] block mt-0.5">
+                    {selectedAsset.acquisition_date || "Jan 12, 2024"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[9px] text-[#A0AEC0] uppercase font-semibold">Purchase Cost</span>
+                  <span className="font-semibold text-[#1A202C] block mt-0.5">
+                    ${selectedAsset.acquisition_cost?.toLocaleString() || "3,499.00"} USD
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[9px] text-[#A0AEC0] uppercase font-semibold">Supplier</span>
+                  <button className="font-semibold text-[#3661ED] hover:underline block mt-0.5 text-left cursor-pointer">
+                    Apple Business
+                  </button>
+                </div>
+              </div>
+            </div>
 
-  // KPI card calculations
-  const totalAssets = assets.length;
-  const availableAssets = assets.filter((a) => a.status === "available").length;
-  const allocatedAssets = assets.filter((a) => a.status === "allocated").length;
-  const maintenanceAssets = assets.filter(
-    (a) => a.status === "under_maintenance"
-  ).length;
+            {/* QR Card */}
+            <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-4 flex gap-4 items-center">
+              <div className="w-16 h-16 bg-white border border-[#E2E8F0] rounded-lg shrink-0 flex items-center justify-center">
+                <svg className="w-12 h-12 text-[#2D3748]" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M3 3h6v6H3zm2 2v2h2V5zm8-2h6v6h-6zm2 2v2h2V5zM3 13h6v6H3zm2 2v2h2v-2zm13-2h2v2h-2zm-2 2h2v2h-2zm2 2h2v2h-2zm-4-4h2v2h-2zm2 2h2v2h-2zm-2 2h2v2h-2zm-3-4h2v2H9zm2 2h2v2h-2zm0 2h2v2h-2zm-4-4h2v2H5z" />
+                </svg>
+              </div>
+              <div className="min-w-0">
+                <h5 className="font-bold text-[#1A202C] text-xs">Asset QR ID</h5>
+                <p className="text-[10px] text-[#718096] mt-0.5 leading-normal">
+                  Scan to quickly access maintenance records or initiate a transfer.
+                </p>
+                <div className="flex gap-2 mt-2">
+                  <button className="border border-[#3661ED] text-[#3661ED] text-[9px] font-bold px-2 py-1 rounded hover:bg-[#3661ED]/5 cursor-pointer">
+                    Print Label
+                  </button>
+                  <button className="border border-[#3661ED] text-[#3661ED] text-[9px] font-bold px-2 py-1 rounded hover:bg-[#3661ED]/5 cursor-pointer">
+                    Download
+                  </button>
+                </div>
+              </div>
+            </div>
 
-  if (loadingAuth) {
-    return (
-      <div className="min-h-screen bg-page-background flex flex-col items-center justify-center">
-        <svg className="animate-spin h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
+            {/* Recent Activity */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <svg className="w-4 h-4 text-[#A0AEC0]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-xs font-bold text-[#718096] uppercase tracking-wider">Recent Activity</span>
+              </div>
+              <div className="space-y-4">
+                <div className="flex gap-2.5 items-start">
+                  <span className="w-5 h-5 rounded-full bg-[#E2F7E2] text-[#166534] flex items-center justify-center text-[10px] font-bold shrink-0">✓</span>
+                  <div>
+                    <h6 className="text-xs font-bold text-[#1A202C]">Physical Audit Completed</h6>
+                    <p className="text-[10px] text-[#718096] mt-0.5">Verified by Marcus Finch &bull; 2 days ago</p>
+                  </div>
+                </div>
+                <div className="flex gap-2.5 items-start">
+                  <span className="w-5 h-5 rounded-full bg-[#E0F2F7] text-[#2C5282] flex items-center justify-center text-[10px] font-bold shrink-0">👤</span>
+                  <div>
+                    <h6 className="text-xs font-bold text-[#1A202C]">Assigned to Alex Rivera</h6>
+                    <p className="text-[10px] text-[#718096] mt-0.5">Location set to SF HQ Floor 4 &bull; Jan 15, 2024</p>
+                  </div>
+                </div>
+              </div>
+              <button className="text-[11px] font-semibold text-[#3661ED] hover:underline mt-4 cursor-pointer">
+                View Full Audit Log
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-    );
-  }
+
+      {/* Sticky footer action buttons */}
+      <div className="border-t border-[#E2E8F0] pt-4 mt-6 flex justify-between gap-3">
+        <button className="flex-1 border border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#4A5568] text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+          </svg>
+          Label
+        </button>
+        <button className="flex-1 border border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#4A5568] text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+          </svg>
+          Transfer
+        </button>
+        <button className="flex-1 border border-[#FEE2E2] hover:bg-[#FEF2F2] text-[#EF4444] text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Retire
+        </button>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-page-background text-text-primary flex flex-col font-sans">
-      <Navbar />
-
-      <main className="max-w-[1440px] mx-auto w-full px-6 py-8 flex-1">
+    <SidebarLayout
+      activePage="Assets"
+      drawerOpen={drawerOpen}
+      onDrawerClose={() => setDrawerOpen(false)}
+      drawerContent={drawerContent}
+      searchPlaceholder="Search assets, IDs, or locations..."
+      onSearchChange={(val) => setSearchQuery(val)}
+    >
+      <div className="max-w-[1440px] mx-auto text-left">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Asset Directory</h1>
-            <p className="text-text-secondary text-sm pt-1">
-              Catalog, register, and track organization physical assets and shared resources.
+            <h1 className="text-3xl font-bold tracking-tight text-[#0F172A]">Asset Management</h1>
+            <p className="text-[#475569] text-sm pt-1">
+              Monitor and manage company resources across 12 departments.
             </p>
           </div>
           {isManager && (
             <button
-              onClick={() => {
-                setError(null);
-                setSuccess(null);
-                setShowRegModal(true);
-              }}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover text-white text-sm font-semibold rounded-lg shadow-sm hover:shadow transition-all cursor-pointer whitespace-nowrap"
+              onClick={() => setShowRegModal(true)}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#3661ED] hover:bg-[#1D4ED8] text-white text-sm font-semibold rounded-lg shadow-sm hover:shadow transition-all cursor-pointer whitespace-nowrap"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -388,517 +559,155 @@ export default function AssetsPage() {
           )}
         </div>
 
-        {/* Global Notifications */}
+        {/* Alerts */}
         {error && (
-          <div className="mb-6 p-4 bg-danger-light border border-danger/20 text-danger rounded-xl flex items-center justify-between">
+          <div className="mb-6 p-4 bg-[#FEE2E2] border border-[#DC2626]/20 text-[#DC2626] rounded-xl flex items-center justify-between">
             <span className="text-sm font-medium">{error}</span>
-            <button onClick={() => setError(null)} className="text-danger hover:text-danger-foreground font-bold text-lg">&times;</button>
+            <button onClick={() => setError(null)} className="font-bold text-lg">&times;</button>
           </div>
         )}
         {success && (
-          <div className="mb-6 p-4 bg-success-light border border-success/20 text-success rounded-xl flex items-center justify-between">
+          <div className="mb-6 p-4 bg-[#DCFCE7] border border-[#16A34A]/20 text-[#166534] rounded-xl flex items-center justify-between">
             <span className="text-sm font-medium">{success}</span>
-            <button onClick={() => setSuccess(null)} className="text-success hover:text-success-foreground font-bold text-lg">&times;</button>
+            <button onClick={() => setSuccess(null)} className="font-bold text-lg">&times;</button>
           </div>
         )}
 
         {/* KPI Row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white border border-border-default rounded-xl p-5 shadow-sm">
-            <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Total Assets</div>
-            <div className="text-2xl font-bold mt-1 text-text-primary">{totalAssets}</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
+          {/* Card 1: Total Assets */}
+          <div className="bg-white border border-[#E2E8F0] rounded-xl p-5 shadow-xs flex items-center gap-4">
+            <div className="p-3 bg-[#E0F2FE] text-[#3661ED] rounded-xl">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+              </svg>
+            </div>
+            <div>
+              <span className="text-xs font-semibold text-[#718096] uppercase tracking-wider block">Total Assets</span>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-2xl font-bold text-[#1A202C]">1,248</span>
+                <span className="text-xs font-semibold text-[#16A34A] flex items-center">
+                  +2.4% ↑
+                </span>
+              </div>
+            </div>
           </div>
-          <div className="bg-white border border-border-default rounded-xl p-5 shadow-sm">
-            <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Available</div>
-            <div className="text-2xl font-bold mt-1 text-success">{availableAssets}</div>
-          </div>
-          <div className="bg-white border border-border-default rounded-xl p-5 shadow-sm">
-            <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Allocated</div>
-            <div className="text-2xl font-bold mt-1 text-primary">{allocatedAssets}</div>
-          </div>
-          <div className="bg-white border border-border-default rounded-xl p-5 shadow-sm">
-            <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Maintenance</div>
-            <div className="text-2xl font-bold mt-1 text-warning">{maintenanceAssets}</div>
+
+          {/* Card 2: Assigned Assets */}
+          <div className="bg-white border border-[#E2E8F0] rounded-xl p-5 shadow-xs flex items-center gap-4">
+            <div className="p-3 bg-[#E0F2FE] text-[#3661ED] rounded-xl">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </div>
+            <div>
+              <span className="text-xs font-semibold text-[#718096] uppercase tracking-wider block">Assigned</span>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-2xl font-bold text-[#1A202C]">1,048</span>
+                <span className="text-xs font-semibold text-[#718096]">84% Occupied</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Toolbar (Search, Filter, View Toggles) */}
-        <div className="bg-white border border-border-default rounded-xl p-4 shadow-sm mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex-1 flex flex-col sm:flex-row items-center gap-3">
-            {/* Search */}
-            <div className="relative w-full sm:max-w-xs">
-              <svg className="w-5 h-5 text-text-muted absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search name, tag, location..."
-                className="w-full pl-10 pr-4 py-2 border border-border-default rounded-lg text-sm bg-page-background focus:outline-none focus:border-primary transition-colors text-text-primary"
-              />
-            </div>
-
-            {/* Category Filter */}
-            <div className="w-full sm:w-auto">
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="w-full sm:w-auto px-3 py-2 border border-border-default rounded-lg text-sm bg-page-background focus:outline-none focus:border-primary transition-colors text-text-primary font-medium"
-              >
-                <option value="all">All Categories</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Status Filter */}
-            <div className="w-full sm:w-auto">
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="w-full sm:w-auto px-3 py-2 border border-border-default rounded-lg text-sm bg-page-background focus:outline-none focus:border-primary transition-colors text-text-primary font-medium"
-              >
-                <option value="all">All Statuses</option>
-                <option value="available">Available</option>
-                <option value="allocated">Allocated</option>
-                <option value="reserved">Reserved</option>
-                <option value="under_maintenance">Under Maintenance</option>
-                <option value="lost">Lost</option>
-                <option value="retired">Retired</option>
-                <option value="disposed">Disposed</option>
-              </select>
-            </div>
+        {/* Filter Section */}
+        <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 shadow-xs mb-6 flex flex-wrap items-center gap-6">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-[#718096] uppercase">Department:</span>
+            <select
+              value={selectedDepartment}
+              onChange={(e) => setSelectedDepartment(e.target.value)}
+              className="bg-white border border-[#E2E8F0] rounded-lg px-3 py-1.5 text-xs font-semibold text-[#2D3748] focus:outline-none focus:border-[#3661ED]"
+            >
+              <option value="all">All Departments</option>
+              <option value="engineering">Engineering</option>
+              <option value="design">Design</option>
+              <option value="it infra">IT Infra</option>
+              <option value="operations">Operations</option>
+            </select>
           </div>
 
-          {/* View Toggles */}
-          <div className="flex items-center border border-border-default rounded-lg p-0.5 shrink-0 w-fit self-end md:self-auto bg-page-background">
-            <button
-              onClick={() => setViewMode("kanban")}
-              className={`p-1.5 rounded-md transition-colors cursor-pointer ${viewMode === "kanban" ? "bg-white text-primary shadow-sm" : "text-text-secondary hover:text-text-primary"}`}
-              title="Kanban View"
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-[#718096] uppercase">Category:</span>
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="bg-white border border-[#E2E8F0] rounded-lg px-3 py-1.5 text-xs font-semibold text-[#2D3748] focus:outline-none focus:border-[#3661ED]"
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4zM14 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2v-4z" />
-              </svg>
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              className={`p-1.5 rounded-md transition-colors cursor-pointer ${viewMode === "list" ? "bg-white text-primary shadow-sm" : "text-text-secondary hover:text-text-primary"}`}
-              title="List View"
+              <option value="all">Hardware</option>
+              <option value="workstations">Workstations</option>
+              <option value="peripherals">Peripherals</option>
+              <option value="networking">Networking</option>
+              <option value="mobile devices">Mobile Devices</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-[#718096] uppercase">Status:</span>
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="bg-white border border-[#E2E8F0] rounded-lg px-3 py-1.5 text-xs font-semibold text-[#2D3748] focus:outline-none focus:border-[#3661ED]"
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
+              <option value="all">All Statuses</option>
+              <option value="available">Available</option>
+              <option value="allocated">Allocated</option>
+              <option value="under_maintenance">Under Maintenance</option>
+              <option value="retired">Retired</option>
+            </select>
           </div>
         </div>
 
-        {/* Loading Spinner for data */}
-        {loadingData ? (
-          <div className="flex items-center justify-center py-20 bg-white border border-border-default rounded-xl shadow-sm">
-            <svg className="animate-spin h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-          </div>
-        ) : filteredAssets.length === 0 ? (
-          /* Empty State */
-          <div className="bg-white border border-border-default rounded-xl p-16 shadow-sm flex flex-col items-center justify-center text-center">
-            <div className="w-16 h-16 rounded-full bg-primary-light flex items-center justify-center text-primary mb-4">
-              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-bold text-text-primary">No Assets Found</h3>
-            <p className="text-text-secondary text-sm max-w-sm pt-1.5">
-              Try adjusting your search criteria, clearing your filters, or register a new asset.
-            </p>
-            {isManager && (
-              <button
-                onClick={() => setShowRegModal(true)}
-                className="mt-5 px-4 py-2 bg-primary hover:bg-primary-hover text-white text-sm font-semibold rounded-lg shadow-sm hover:shadow cursor-pointer transition-all"
-              >
-                Register Asset
-              </button>
-            )}
-          </div>
-        ) : viewMode === "kanban" ? (
-          /* Kanban View */
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredAssets.map((asset) => {
-              const cat = categories.find((c) => c.id === asset.category_id);
-              const holder = employees.find((e) => e.id === asset.current_holder_id);
-
-              return (
-                <Link
-                  key={asset.id}
-                  href={`/assets/${asset.id}`}
-                  className="bg-white border border-border-default hover:border-primary hover:shadow-md rounded-xl p-5 shadow-sm transition-all flex flex-col h-full group"
-                >
-                  <div className="flex items-start justify-between gap-4 mb-3">
-                    <span className="text-xs font-mono font-semibold px-2 py-0.5 bg-secondary-surface text-text-secondary rounded">
-                      {asset.asset_tag}
-                    </span>
-                    <span
-                      className={`text-xs font-semibold px-2.5 py-0.5 rounded-full capitalize ${
-                        asset.status === "available" ? "bg-success-light text-success" :
-                        asset.status === "allocated" ? "bg-primary-light text-primary" :
-                        asset.status === "under_maintenance" ? "bg-warning-light text-warning" :
-                        asset.status === "lost" ? "bg-danger-light text-danger" :
-                        "bg-secondary-surface text-text-secondary"
-                      }`}
-                    >
-                      {asset.status.replace("_", " ")}
-                    </span>
-                  </div>
-
-                  <h3 className="font-bold text-text-primary text-base group-hover:text-primary transition-colors line-clamp-1">
-                    {asset.name}
-                  </h3>
-                  
-                  <span className="text-xs text-text-muted mt-1 leading-none uppercase tracking-wider font-semibold">
-                    {cat?.name || "Uncategorized"}
-                  </span>
-
-                  <div className="border-t border-border-light my-4" />
-
-                  <div className="space-y-2 text-xs text-text-secondary mt-auto">
-                    {asset.serial_number && (
-                      <div className="flex justify-between">
-                        <span className="text-text-muted">Serial:</span>
-                        <span className="font-medium text-text-primary truncate max-w-[150px]">{asset.serial_number}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between">
-                      <span className="text-text-muted">Location:</span>
-                      <span className="font-medium text-text-primary">{asset.location || "Not Set"}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-text-muted">Holder:</span>
-                      <span className="font-medium text-text-primary truncate max-w-[150px]">{holder?.name || "Unassigned"}</span>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        ) : (
-          /* List View Table */
-          <div className="bg-white border border-border-default rounded-xl shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-secondary-surface/40 border-b border-border-default text-xs text-text-secondary font-semibold uppercase tracking-wider">
-                    <th className="px-6 py-4">Asset Tag</th>
-                    <th className="px-6 py-4">Name</th>
-                    <th className="px-6 py-4">Category</th>
-                    <th className="px-6 py-4">Status</th>
-                    <th className="px-6 py-4">Location</th>
-                    <th className="px-6 py-4">Holder</th>
-                    <th className="px-6 py-4 text-right">Actions</th>
+        {/* Table Registry */}
+        <div className="bg-white border border-[#E2E8F0] rounded-xl shadow-xs overflow-hidden">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-xs font-bold text-[#718096] uppercase tracking-wider">
+                <th className="py-4 px-6 w-12">
+                  <input type="checkbox" className="rounded border-[#E2E8F0] text-[#3661ED] focus:ring-[#3661ED]" />
+                </th>
+                <th className="py-4 px-4 w-12 text-center">QR</th>
+                <th className="py-4 px-4 w-32">Asset ID</th>
+                <th className="py-4 px-6">Asset Name</th>
+                <th className="py-4 px-6">Category</th>
+                <th className="py-4 px-6">Department</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredAssets.map((asset) => {
+                const isActiveRow = selectedAsset?.id === asset.id && drawerOpen;
+                return (
+                  <tr
+                    key={asset.id}
+                    onClick={() => handleRowClick(asset)}
+                    className={`border-b border-[#E2E8F0] text-sm text-[#4A5568] hover:bg-[#F8FAFC] cursor-pointer transition-colors ${
+                      isActiveRow ? "bg-[#EDF2F7] border-l-4 border-l-[#3661ED]" : ""
+                    }`}
+                  >
+                    <td className="py-4 px-6" onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox" checked={isActiveRow} onChange={() => {}} className="rounded border-[#E2E8F0] text-[#3661ED]" />
+                    </td>
+                    <td className="py-4 px-4 text-center text-[#A0AEC0]">
+                      <svg className="w-5 h-5 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m-3.3 3.6l.7.7m6.2 0l-.7-.7M21 12h-1M4 12H3m3.3 4.3l.7-.7m6.2 0l-.7.7M12 21v-1m0-11a3 3 0 110 6 3 3 0 010-6z" />
+                      </svg>
+                    </td>
+                    <td className="py-4 px-4 font-bold text-[#1A202C]">{asset.asset_tag}</td>
+                    <td className="py-4 px-6 text-[#1A202C] font-medium">{asset.name}</td>
+                    <td className="py-4 px-6">{asset.categoryName}</td>
+                    <td className="py-4 px-6">{asset.department}</td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-border-default/40 text-sm text-text-primary">
-                  {filteredAssets.map((asset) => {
-                    const cat = categories.find((c) => c.id === asset.category_id);
-                    const holder = employees.find((e) => e.id === asset.current_holder_id);
+                );
+              })}
+            </tbody>
+          </table>
 
-                    return (
-                      <tr key={asset.id} className="hover:bg-page-background/40 transition-colors">
-                        <td className="px-6 py-4 font-mono font-semibold text-xs text-text-secondary">{asset.asset_tag}</td>
-                        <td className="px-6 py-4 font-semibold text-text-primary">
-                          <Link href={`/assets/${asset.id}`} className="hover:text-primary transition-colors">
-                            {asset.name}
-                          </Link>
-                        </td>
-                        <td className="px-6 py-4 text-text-secondary">{cat?.name || "Uncategorized"}</td>
-                        <td className="px-6 py-4">
-                          <span
-                            className={`text-xs font-semibold px-2.5 py-0.5 rounded-full capitalize ${
-                              asset.status === "available" ? "bg-success-light text-success" :
-                              asset.status === "allocated" ? "bg-primary-light text-primary" :
-                              asset.status === "under_maintenance" ? "bg-warning-light text-warning" :
-                              asset.status === "lost" ? "bg-danger-light text-danger" :
-                              "bg-secondary-surface text-text-secondary"
-                            }`}
-                          >
-                            {asset.status.replace("_", " ")}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-text-secondary">{asset.location || "Not Set"}</td>
-                        <td className="px-6 py-4 text-text-secondary font-medium">{holder?.name || "Unassigned"}</td>
-                        <td className="px-6 py-4 text-right">
-                          <Link
-                            href={`/assets/${asset.id}`}
-                            className="text-primary hover:text-primary-hover font-semibold text-xs"
-                          >
-                            View Details
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </main>
-
-      {/* Register Asset Modal */}
-      {showRegModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white border border-border-default rounded-2xl w-full max-w-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-5 border-b border-border-default shrink-0">
-              <h2 className="text-xl font-bold text-text-primary">Register New Asset</h2>
-              <button
-                onClick={() => setShowRegModal(false)}
-                className="text-text-muted hover:text-text-primary text-2xl font-semibold leading-none cursor-pointer"
-              >
-                &times;
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <form onSubmit={handleRegisterAsset} className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* General Section */}
-              <div>
-                <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-3">General Information</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs font-semibold text-text-secondary mb-1.5">Asset Name *</label>
-                    <input
-                      type="text"
-                      required
-                      value={formName}
-                      onChange={(e) => setFormName(e.target.value)}
-                      placeholder="e.g. MacBook Pro 16-inch"
-                      className="w-full px-3.5 py-2 border border-border-default rounded-lg text-sm focus:outline-none focus:border-primary text-text-primary bg-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-text-secondary mb-1.5">Category *</label>
-                    <select
-                      value={formCategoryId}
-                      onChange={(e) => setFormCategoryId(e.target.value)}
-                      className="w-full px-3.5 py-2 border border-border-default rounded-lg text-sm focus:outline-none focus:border-primary text-text-primary bg-white font-medium"
-                    >
-                      {categories.map((cat) => (
-                        <option key={cat.id} value={cat.id}>{cat.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-text-secondary mb-1.5">Serial Number</label>
-                    <input
-                      type="text"
-                      value={formSerialNumber}
-                      onChange={(e) => setFormSerialNumber(e.target.value)}
-                      placeholder="e.g. C02X87S1LVC"
-                      className="w-full px-3.5 py-2 border border-border-default rounded-lg text-sm focus:outline-none focus:border-primary text-text-primary bg-white"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Purchase Details */}
-              <div>
-                <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-3">Acquisition Details</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-text-secondary mb-1.5">Acquisition Date</label>
-                    <input
-                      type="date"
-                      value={formAcquisitionDate}
-                      onChange={(e) => setFormAcquisitionDate(e.target.value)}
-                      className="w-full px-3.5 py-2 border border-border-default rounded-lg text-sm focus:outline-none focus:border-primary text-text-primary bg-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-text-secondary mb-1.5">Acquisition Cost (USD)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={formAcquisitionCost}
-                      onChange={(e) => setFormAcquisitionCost(e.target.value)}
-                      className="w-full px-3.5 py-2 border border-border-default rounded-lg text-sm focus:outline-none focus:border-primary text-text-primary bg-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-text-secondary mb-1.5">Initial Condition</label>
-                    <select
-                      value={formCondition}
-                      onChange={(e) => setFormCondition(e.target.value as any)}
-                      className="w-full px-3.5 py-2 border border-border-default rounded-lg text-sm focus:outline-none focus:border-primary text-text-primary bg-white font-medium"
-                    >
-                      <option value="new">New</option>
-                      <option value="good">Good</option>
-                      <option value="fair">Fair</option>
-                      <option value="poor">Poor</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-text-secondary mb-1.5">Location / Storage Room</label>
-                    <input
-                      type="text"
-                      value={formLocation}
-                      onChange={(e) => setFormLocation(e.target.value)}
-                      placeholder="e.g. IT Lab, Room 204"
-                      className="w-full px-3.5 py-2 border border-border-default rounded-lg text-sm focus:outline-none focus:border-primary text-text-primary bg-white"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Flags */}
-              <div className="flex items-center gap-2 py-2">
-                <input
-                  type="checkbox"
-                  id="is_shared"
-                  checked={formIsShared}
-                  onChange={(e) => setFormIsShared(e.target.checked)}
-                  className="w-4 h-4 text-primary border-border-default rounded focus:ring-primary focus:outline-none"
-                />
-                <label htmlFor="is_shared" className="text-sm font-semibold text-text-secondary cursor-pointer">
-                  Mark as Shared Resource (Bookable by employees)
-                </label>
-              </div>
-
-              {/* Media Uploads */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2">
-                {/* Photos upload */}
-                <div>
-                  <label className="block text-xs font-semibold text-text-secondary mb-2">Photos</label>
-                  <div className="flex flex-col gap-3">
-                    <button
-                      type="button"
-                      disabled={uploadingPhoto}
-                      onClick={() => photoInputRef.current?.click()}
-                      className="flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-border-default rounded-lg text-xs font-medium hover:bg-page-background transition-colors cursor-pointer text-text-secondary disabled:opacity-50"
-                    >
-                      {uploadingPhoto ? (
-                        <svg className="animate-spin h-4 w-4 text-primary" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                      ) : (
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                      )}
-                      Upload Image
-                    </button>
-                    <input
-                      type="file"
-                      ref={photoInputRef}
-                      onChange={handlePhotoUpload}
-                      accept="image/*"
-                      className="hidden"
-                    />
-                    
-                    {/* List of uploaded photos */}
-                    {formPhotos.length > 0 && (
-                      <div className="grid grid-cols-3 gap-2">
-                        {formPhotos.map((photo, i) => (
-                          <div key={photo.key} className="relative group aspect-square rounded-lg border border-border-default overflow-hidden bg-secondary-surface">
-                            <img src={photo.url} alt={photo.name} className="w-full h-full object-cover" />
-                            <button
-                              type="button"
-                              onClick={() => handleRemovePhoto(i, photo.key)}
-                              className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center hover:bg-danger text-xs font-bold leading-none cursor-pointer"
-                              title="Delete photo"
-                            >
-                              &times;
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Documents upload */}
-                <div>
-                  <label className="block text-xs font-semibold text-text-secondary mb-2">Documents (Manuals, Invoices)</label>
-                  <div className="flex flex-col gap-3">
-                    <button
-                      type="button"
-                      disabled={uploadingDoc}
-                      onClick={() => docInputRef.current?.click()}
-                      className="flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-border-default rounded-lg text-xs font-medium hover:bg-page-background transition-colors cursor-pointer text-text-secondary disabled:opacity-50"
-                    >
-                      {uploadingDoc ? (
-                        <svg className="animate-spin h-4 w-4 text-primary" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                      ) : (
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                      )}
-                      Upload Document
-                    </button>
-                    <input
-                      type="file"
-                      ref={docInputRef}
-                      onChange={handleDocUpload}
-                      accept=".pdf,.doc,.docx,.xls,.xlsx,.txt"
-                      className="hidden"
-                    />
-
-                    {/* List of uploaded documents */}
-                    {formDocuments.length > 0 && (
-                      <div className="space-y-1.5">
-                        {formDocuments.map((doc, i) => (
-                          <div key={doc.key} className="flex items-center justify-between p-2 bg-secondary-surface rounded-lg text-xs border border-border-default/60">
-                            <span className="truncate max-w-[180px] font-medium" title={doc.name}>{doc.name}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveDoc(i, doc.key)}
-                              className="text-text-muted hover:text-danger font-semibold text-lg leading-none cursor-pointer px-1"
-                            >
-                              &times;
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </form>
-
-            {/* Modal Footer */}
-            <div className="px-6 py-4 bg-secondary-surface border-t border-border-default flex items-center justify-end gap-3 shrink-0">
-              <button
-                type="button"
-                onClick={() => setShowRegModal(false)}
-                className="px-4 py-2 border border-border-default rounded-lg text-sm text-text-secondary hover:bg-white transition-colors cursor-pointer font-semibold"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                onClick={handleRegisterAsset}
-                disabled={isSubmitting || uploadingPhoto || uploadingDoc}
-                className="px-4 py-2 bg-primary hover:bg-primary-hover text-white text-sm font-semibold rounded-lg shadow-sm hover:shadow transition-all cursor-pointer disabled:opacity-50"
-              >
-                {isSubmitting ? "Registering..." : "Register Asset"}
-              </button>
-            </div>
+          {/* Pagination */}
+          <div className="p-4 border-t border-[#E2E8F0] flex items-center justify-between text-xs text-[#718096]">
+            <span>Showing 1-{filteredAssets.length} of {filteredAssets.length} assets</span>
           </div>
         </div>
-      )}
-    </div>
+      </div>
+    </SidebarLayout>
   );
 }

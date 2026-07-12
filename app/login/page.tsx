@@ -3,11 +3,28 @@
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { insforge } from "../lib/insforge/client";
 import { signInUser, signUpUser, verifyEmailOtp, resendOtp, initiateOAuth } from "../actions";
 
 export default function LoginPage() {
+  const router = useRouter();
   // Mode: "signin" | "signup" | "verify"
   const [mode, setMode] = useState<"signin" | "signup" | "verify">("signin");
+
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const { data } = await insforge.auth.getCurrentUser();
+        if (data?.user) {
+          router.push("/dashboard");
+        }
+      } catch (err) {
+        console.error("Auth check failed on login", err);
+      }
+    }
+    void checkAuth();
+  }, [router]);
   
   // Form fields
   const [name, setName] = useState("");
