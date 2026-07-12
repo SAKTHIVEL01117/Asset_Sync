@@ -7,6 +7,7 @@ import { insforge } from "../lib/insforge/client";
 
 interface RecentActivityItem {
   id: string;
+  logId: string;
   type: string;
   title: string;
   description: string;
@@ -68,6 +69,7 @@ export default function DashboardPage() {
 
             return {
               id: log.entity_id,
+              logId: log.id,
               type: log.activity_type,
               title: log.activity_type.replace(/_/g, " ").toUpperCase(),
               description: log.description,
@@ -536,7 +538,7 @@ export default function DashboardPage() {
               ) : (
                 activities.map((act) => (
                   <div
-                    key={act.id}
+                    key={act.logId}
                     onClick={() => handleOpenDrawer(act)}
                     className="flex gap-3 items-start group cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg -mx-1.5 transition-colors"
                   >
