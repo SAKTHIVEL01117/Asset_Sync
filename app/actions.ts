@@ -137,3 +137,36 @@ export async function initiateOAuth(provider: string) {
 
   redirect(data.url);
 }
+
+export async function getAiCompletion(prompt: string) {
+  try {
+    const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer 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'
+      },
+      body: JSON.stringify({
+        model: 'NVIDIABuild-Autogen-02',
+        messages: [
+          { role: 'system', content: 'You are AssetSync Intelligence, a helpful enterprise assistant designed to answer queries about assets, maintenance schedules, bookings, and operations.' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.5,
+        max_tokens: 512
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`NVIDIA API error: ${response.status} - ${errorText}`);
+    }
+
+    const json = await response.json();
+    return { text: json.choices?.[0]?.message?.content || 'No response returned.' };
+  } catch (err: any) {
+    console.error('getAiCompletion failed:', err);
+    return { error: err.message || 'AI request failed' };
+  }
+}
+

@@ -377,7 +377,7 @@ export default function AuditsPage() {
             <select
               value={selectedDeptId}
               onChange={(e) => setSelectedDeptId(e.target.value)}
-              className="w-full bg-white border border-[#D1D5DB] rounded-lg py-2 pl-3 pr-8 text-xs text-[#1F2937] focus:outline-none"
+              className="w-full bg-white border border-[#D1D5DB] rounded-lg py-2 pl-3 pr-8 text-xs text-[#1F2937] focus:outline-none appearance-none"
               required
             >
               <option value="">Select department...</option>
@@ -399,7 +399,8 @@ export default function AuditsPage() {
             <select
               value={selectedAuditorId}
               onChange={(e) => setSelectedAuditorId(e.target.value)}
-              className="w-full bg-white border border-[#D1D5DB] rounded-lg py-2 pl-3 pr-8 text-xs text-[#1F2937] focus:outline-none"
+              className="w-full bg-white border border-[#D1D5DB] rounded-lg py-2 pl-3 pr-8 text-xs text-[#1F2937] focus:outline-none appearance-none"
+              required
             >
               <option value="">Select auditor...</option>
               {employees.filter(e => e.role === "admin" || e.role === "asset_manager").map(auditor => (

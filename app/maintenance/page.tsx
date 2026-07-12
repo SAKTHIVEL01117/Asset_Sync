@@ -43,6 +43,34 @@ export default function MaintenancePage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const [aiSuggestion, setAiSuggestion] = useState("Select an asset to generate maintenance recommendation.");
+  const [loadingAi, setLoadingAi] = useState(false);
+
+  useEffect(() => {
+    async function loadSuggestion() {
+      if (!selectedAssetId) return;
+      const asset = dbAssets.find(a => a.id === selectedAssetId);
+      if (!asset) return;
+      setLoadingAi(true);
+      setAiSuggestion("Analyzing historical telemetry data...");
+      try {
+        const { getAiCompletion } = await import("../actions");
+        const prompt = `Give a concise, 1-2 sentence technical maintenance recommendation for this asset: Name: ${asset.name}, Tag: ${asset.asset_tag}, Condition: ${asset.condition}, Location: ${asset.location || 'Unknown'}. What should we focus on?`;
+        const res = await getAiCompletion(prompt);
+        if (res.error) {
+          setAiSuggestion(`Unable to retrieve recommendation: ${res.error}`);
+        } else {
+          setAiSuggestion(res.text || "No recommendation found.");
+        }
+      } catch (err: any) {
+        setAiSuggestion("Failed to contact AI engine.");
+      } finally {
+        setLoadingAi(false);
+      }
+    }
+    void loadSuggestion();
+  }, [selectedAssetId, dbAssets]);
+
   // Open schedule drawer if ?schedule=true query param is present
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -296,7 +324,7 @@ export default function MaintenancePage() {
                 <select
                   value={selectedTechnicianId}
                   onChange={(e) => setSelectedTechnicianId(e.target.value)}
-                  className="w-full bg-white border border-[#D1D5DB] rounded-lg py-2 pl-3 pr-8 text-xs text-[#374151] focus:outline-none"
+                  className="w-full bg-white border border-[#D1D5DB] rounded-lg py-2 pl-3 pr-8 text-xs text-[#374151] focus:outline-none appearance-none"
                 >
                   <option value="">Select technician...</option>
                   {dbEmployees.filter(e => e.role === "admin" || e.role === "asset_manager").map(tech => (
@@ -312,7 +340,7 @@ export default function MaintenancePage() {
                 <select
                   value={priority}
                   onChange={(e) => setPriority(e.target.value)}
-                  className="w-full bg-white border border-[#D1D5DB] rounded-lg py-2 px-3 text-xs text-[#374151] focus:outline-none"
+                  className="w-full bg-white border border-[#D1D5DB] rounded-lg py-2 px-3 text-xs text-[#374151] focus:outline-none appearance-none"
                 >
                   <option value="Low">Low</option>
                   <option value="Medium">Medium</option>
@@ -385,7 +413,7 @@ export default function MaintenancePage() {
             <select
               value={selectedAssetId}
               onChange={(e) => setSelectedAssetId(e.target.value)}
-              className="w-full bg-white border border-[#D1D5DB] rounded-lg py-2 pl-3 pr-8 text-xs text-[#374151] focus:outline-none"
+              className="w-full bg-white border border-[#D1D5DB] rounded-lg py-2 pl-3 pr-8 text-xs text-[#374151] focus:outline-none appearance-none"
             >
               <option value="">Select an asset...</option>
               {dbAssets.map(asset => (
@@ -419,7 +447,7 @@ export default function MaintenancePage() {
             <select
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
-              className="w-full bg-white border border-[#D1D5DB] rounded-lg py-2 pl-3 pr-8 text-xs text-[#374151] focus:outline-none"
+              className="w-full bg-white border border-[#D1D5DB] rounded-lg py-2 pl-3 pr-8 text-xs text-[#374151] focus:outline-none appearance-none"
             >
               <option value="Low">Low</option>
               <option value="Medium">Medium</option>
@@ -440,7 +468,7 @@ export default function MaintenancePage() {
             <select
               value={selectedTechnicianId}
               onChange={(e) => setSelectedTechnicianId(e.target.value)}
-              className="w-full bg-white border border-[#D1D5DB] rounded-lg py-2 pl-3 pr-8 text-xs text-[#374151] focus:outline-none"
+              className="w-full bg-white border border-[#D1D5DB] rounded-lg py-2 pl-3 pr-8 text-xs text-[#374151] focus:outline-none appearance-none"
             >
               <option value="">Select a technician...</option>
               {dbEmployees.filter(e => e.role === "admin" || e.role === "asset_manager").map(tech => (
@@ -472,7 +500,7 @@ export default function MaintenancePage() {
           <div className="min-w-0">
             <h5 className="font-bold text-xs text-[#374151]">AI Suggestion</h5>
             <p className="text-[10px] text-[#4B5563] mt-0.5 leading-normal">
-              Based on historical data for this asset, we recommend checking the hydraulic pressure valves which typically fail every 400 operation hours.
+              {loadingAi ? "Analyzing telemetry..." : aiSuggestion}
             </p>
           </div>
         </div>

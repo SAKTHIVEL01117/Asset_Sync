@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import SidebarLayout from "../components/SidebarLayout";
 import { insforge } from "../lib/insforge/client";
 
@@ -31,8 +31,51 @@ export default function ResourceBookingPage() {
   const [reservationDate, setReservationDate] = useState(new Date().toISOString().substring(0, 10));
   const [reservationTime, setReservationTime] = useState("14:00");
   const [duration, setDuration] = useState("2h 30m");
-  const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
-  const [calendarDays, setCalendarDays] = useState<any[]>([]);
+  const [rawBookings, setRawBookings] = useState<any[]>([]);
+
+  const schedule = useMemo(() => {
+    return rawBookings
+      .filter((b: any) => b.asset_id === selectedResourceId)
+      .map((b: any) => {
+        const start = new Date(b.start_time);
+        const end = new Date(b.end_time);
+        const timeStr = `${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        const dateBadge = new Date(b.booking_date).toLocaleDateString([], { month: 'short', day: '2-digit' }).toUpperCase();
+        return {
+          id: b.id,
+          title: `${b.assets?.name || "Shared Resource"} Booking`,
+          time: timeStr,
+          location: b.assets?.location || "Shared location",
+          date: dateBadge
+        };
+      });
+  }, [rawBookings, selectedResourceId]);
+
+  const calendarDays = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const totalDays = lastDay.getDate();
+    const startDayOfWeek = firstDay.getDay();
+
+    const days: any[] = [];
+    const prevMonthLastDay = new Date(year, month, 0).getDate();
+    for (let i = startDayOfWeek - 1; i >= 0; i--) {
+      days.push({ num: prevMonthLastDay - i, currentMonth: false });
+    }
+    for (let i = 1; i <= totalDays; i++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
+      const dayBookings = rawBookings.filter(b => b.booking_date === dateStr && b.asset_id === selectedResourceId);
+      days.push({
+        num: i,
+        currentMonth: true,
+        booking: dayBookings.length > 0 ? `${dayBookings[0].assets?.name || "Booked"}` : undefined
+      });
+    }
+    return days;
+  }, [rawBookings, selectedResourceId]);
   const [loading, setLoading] = useState(true);
   const [employee, setEmployee] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -101,45 +144,7 @@ export default function ResourceBookingPage() {
         .order("booking_date", { ascending: true });
 
       if (bookingsData) {
-        const mappedSchedule = bookingsData.map((b: any) => {
-          const start = new Date(b.start_time);
-          const end = new Date(b.end_time);
-          const timeStr = `${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-          const dateBadge = new Date(b.booking_date).toLocaleDateString([], { month: 'short', day: '2-digit' }).toUpperCase();
-          return {
-            id: b.id,
-            title: `${b.assets?.name || "Shared Resource"} Booking`,
-            time: timeStr,
-            location: b.assets?.location || "Shared location",
-            date: dateBadge
-          };
-        });
-        setSchedule(mappedSchedule);
-
-        // 4. Generate Calendar Days
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = now.getMonth();
-        const firstDay = new Date(year, month, 1);
-        const lastDay = new Date(year, month + 1, 0);
-        const totalDays = lastDay.getDate();
-        const startDayOfWeek = firstDay.getDay();
-
-        const days: any[] = [];
-        const prevMonthLastDay = new Date(year, month, 0).getDate();
-        for (let i = startDayOfWeek - 1; i >= 0; i--) {
-          days.push({ num: prevMonthLastDay - i, currentMonth: false });
-        }
-        for (let i = 1; i <= totalDays; i++) {
-          const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
-          const dayBookings = bookingsData.filter(b => b.booking_date === dateStr);
-          days.push({
-            num: i,
-            currentMonth: true,
-            booking: dayBookings.length > 0 ? `${dayBookings[0].assets?.name || "Booked"}` : undefined
-          });
-        }
-        setCalendarDays(days);
+        setRawBookings(bookingsData);
       }
     } catch (err: any) {
       console.error("Booking page fetch failed", err);
@@ -403,8 +408,9 @@ export default function ResourceBookingPage() {
                     <select
                       value={selectedResourceId}
                       onChange={(e) => setSelectedResourceId(e.target.value)}
-                      className="w-full bg-white border border-[#EDF2F7] rounded-lg py-2 pl-3 pr-8 text-xs font-semibold text-[#2D3748] focus:outline-none"
+                      className="w-full bg-white border border-[#EDF2F7] rounded-lg py-2 pl-3 pr-8 text-xs font-semibold text-[#2D3748] focus:outline-none appearance-none"
                     >
+                      <option value="">Select resource...</option>
                       {dbResources.map(res => (
                         <option key={res.id} value={res.id}>{res.name}</option>
                       ))}

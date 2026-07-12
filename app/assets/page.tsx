@@ -653,6 +653,203 @@ export default function AssetsPage() {
           </div>
         </div>
       </div>
+
+      {showRegModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-[500px] border border-border-default overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-[#E2E8F0] flex justify-between items-center bg-[#F8FAFC]">
+              <h3 className="font-bold text-lg text-[#0F172A]">Register New Asset</h3>
+              <button onClick={() => setShowRegModal(false)} className="text-gray-500 hover:text-black cursor-pointer">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <form onSubmit={handleRegisterAsset} className="p-5 space-y-4 overflow-y-auto flex-1 text-left">
+              <div className="flex flex-col space-y-1">
+                <label className="text-xs font-bold text-gray-700">Asset Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Dell Latitude 5420"
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#3661ED] text-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col space-y-1">
+                  <label className="text-xs font-bold text-gray-700">Category *</label>
+                  <select
+                    value={formCategoryId}
+                    onChange={(e) => setFormCategoryId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#3661ED] text-sm bg-white"
+                    required
+                  >
+                    <option value="">Select category...</option>
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col space-y-1">
+                  <label className="text-xs font-bold text-gray-700">Serial Number</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. SN-DELL-5544"
+                    value={formSerialNumber}
+                    onChange={(e) => setFormSerialNumber(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#3661ED] text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col space-y-1">
+                  <label className="text-xs font-bold text-gray-700">Acquisition Date</label>
+                  <input
+                    type="date"
+                    value={formAcquisitionDate}
+                    onChange={(e) => setFormAcquisitionDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#3661ED] text-sm"
+                  />
+                </div>
+
+                <div className="flex flex-col space-y-1">
+                  <label className="text-xs font-bold text-gray-700">Acquisition Cost (USD)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={formAcquisitionCost}
+                    onChange={(e) => setFormAcquisitionCost(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#3661ED] text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col space-y-1">
+                  <label className="text-xs font-bold text-gray-700">Condition</label>
+                  <select
+                    value={formCondition}
+                    onChange={(e) => setFormCondition(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#3661ED] text-sm bg-white"
+                  >
+                    <option value="new">New</option>
+                    <option value="good">Good</option>
+                    <option value="fair">Fair</option>
+                    <option value="poor">Poor</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col space-y-1">
+                  <label className="text-xs font-bold text-gray-700">Location</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Building B, Room 302"
+                    value={formLocation}
+                    onChange={(e) => setFormLocation(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#3661ED] text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="formIsShared"
+                  checked={formIsShared}
+                  onChange={(e) => setFormIsShared(e.target.checked)}
+                  className="w-4 h-4 text-[#3661ED] focus:ring-[#3661ED] border-gray-300 rounded"
+                />
+                <label htmlFor="formIsShared" className="text-xs font-bold text-gray-700 cursor-pointer">
+                  Share this resource (available for shared resource booking)
+                </label>
+              </div>
+
+              <div className="border-t border-gray-200 pt-3 grid grid-cols-2 gap-4">
+                <div className="flex flex-col space-y-1.5">
+                  <label className="text-xs font-bold text-gray-700">Photos</label>
+                  <input
+                    type="file"
+                    ref={photoInputRef}
+                    onChange={handlePhotoUpload}
+                    className="hidden"
+                    accept="image/*"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => photoInputRef.current?.click()}
+                    disabled={uploadingPhoto}
+                    className="w-full px-3 py-2 border border-[#3661ED] border-dashed text-[#3661ED] hover:bg-[#3661ED]/5 rounded-lg text-xs font-semibold cursor-pointer disabled:opacity-50 transition-colors"
+                  >
+                    {uploadingPhoto ? "Uploading..." : "＋ Upload Photo"}
+                  </button>
+                  {formPhotos.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {formPhotos.map((p, idx) => (
+                        <div key={idx} className="text-[10px] bg-slate-100 px-2 py-0.5 rounded flex items-center gap-1 border border-slate-200">
+                          <span className="truncate max-w-[80px]">{p.name}</span>
+                          <button type="button" className="text-red-500 font-bold hover:text-red-700" onClick={() => setFormPhotos(prev => prev.filter((_, i) => i !== idx))}>&times;</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col space-y-1.5">
+                  <label className="text-xs font-bold text-gray-700">Documents</label>
+                  <input
+                    type="file"
+                    ref={docInputRef}
+                    onChange={handleDocUpload}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => docInputRef.current?.click()}
+                    disabled={uploadingDoc}
+                    className="w-full px-3 py-2 border border-[#3661ED] border-dashed text-[#3661ED] hover:bg-[#3661ED]/5 rounded-lg text-xs font-semibold cursor-pointer disabled:opacity-50 transition-colors"
+                  >
+                    {uploadingDoc ? "Uploading..." : "＋ Upload Document"}
+                  </button>
+                  {formDocuments.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {formDocuments.map((d, idx) => (
+                        <div key={idx} className="text-[10px] bg-slate-100 px-2 py-0.5 rounded flex items-center gap-1 border border-slate-200">
+                          <span className="truncate max-w-[80px]">{d.name}</span>
+                          <button type="button" className="text-red-500 font-bold hover:text-red-700" onClick={() => setFormDocuments(prev => prev.filter((_, i) => i !== idx))}>&times;</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-gray-200 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowRegModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 text-sm font-semibold hover:bg-gray-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 bg-[#3661ED] hover:bg-[#1D4ED8] text-white text-sm font-semibold rounded-lg shadow-sm hover:shadow cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmitting ? "Registering..." : "Register Asset"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </SidebarLayout>
   );
 }

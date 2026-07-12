@@ -30,21 +30,43 @@ export default function AIAssistantPage() {
     },
   ]);
   const [inputText, setInputText] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
 
-  const handleSend = () => {
-    if (!inputText.trim()) return;
+  const handleSend = async () => {
+    const text = inputText.trim();
+    if (!text) return;
+    
+    setInputText("");
+    
     const userMsg: Message = {
       sender: "user",
-      text: inputText.trim(),
+      text: text,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
-    const responseMsg: Message = {
-      sender: "ai",
-      text: `Understood. Querying telemetry database for "${inputText}". Fetching current parameters...`,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-    setMessages((prev) => [...prev, userMsg, responseMsg]);
-    setInputText("");
+
+    setMessages((prev) => [...prev, userMsg]);
+    setIsTyping(true);
+
+    try {
+      const { getAiCompletion } = await import("../actions");
+      const res = await getAiCompletion(text);
+      
+      const responseMsg: Message = {
+        sender: "ai",
+        text: res.error ? `Failed to load intelligence: ${res.error}` : (res.text || "No response returned."),
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+      setMessages((prev) => [...prev, responseMsg]);
+    } catch (err: any) {
+      const responseMsg: Message = {
+        sender: "ai",
+        text: `Error connecting to the neural engine: ${err.message}`,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+      setMessages((prev) => [...prev, responseMsg]);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   return (
@@ -144,6 +166,22 @@ export default function AIAssistantPage() {
                   </div>
                 </div>
               ))}
+              {isTyping && (
+                <div className="flex gap-3.5 items-start">
+                  <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center bg-[#DBEAFE] text-[#2563EB] font-bold text-xs animate-bounce">
+                    🤖
+                  </div>
+                  <div className="flex flex-col max-w-[80%]">
+                    <div className="rounded-xl p-4 text-sm bg-[#F8FAFC] border border-[#E2E8F0] text-[#6B7280] text-left">
+                      <span className="flex gap-1 items-center py-1">
+                        <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce"></span>
+                        <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
+                        <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

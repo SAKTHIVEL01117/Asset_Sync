@@ -12,20 +12,6 @@ export default function Home() {
   // FAQ accordion state
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
 
-  useEffect(() => {
-    async function checkAuth() {
-      try {
-        const { data } = await insforge.auth.getCurrentUser();
-        if (data?.user) {
-          router.push("/dashboard");
-        }
-      } catch (err) {
-        console.error("Home auth check failed", err);
-      }
-    }
-    void checkAuth();
-  }, [router]);
-
 
   const toggleFaq = (index: number) => {
     setOpenFaqIndex(openFaqIndex === index ? null : index);
