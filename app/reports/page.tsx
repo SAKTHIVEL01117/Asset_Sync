@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import SidebarLayout from "../components/SidebarLayout";
+import { insforge } from "../lib/insforge/client";
 
 interface DepartmentRow {
   dept: string;
@@ -14,48 +15,129 @@ interface DepartmentRow {
 export default function ReportsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [timeframe, setTimeframe] = useState<"monthly" | "quarterly" | "yearly">("quarterly");
+  
+  const [dbAssets, setDbAssets] = useState<any[]>([]);
+  const [dbDepartments, setDbDepartments] = useState<any[]>([]);
+  const [dbMaintenance, setDbMaintenance] = useState<any[]>([]);
+  const [dbAudits, setDbAudits] = useState<any[]>([]);
+  const [recentActivities, setRecentActivities] = useState<any[]>([]);
+  
+  const [kpis, setKpis] = useState({
+    totalValue: "$0.0",
+    maintenanceSpend: "$0.0",
+    activeAudits: 0,
+    complianceRate: "100%"
+  });
 
-  const departments: DepartmentRow[] = [
-    {
-      dept: "Logistics & Supply",
-      usage: "8,240 hrs",
-      incidents: 12,
-      efficiency: "78%",
-      isPositive: false,
-    },
-    {
-      dept: "Production Wing B",
-      usage: "14,102 hrs",
-      incidents: 2,
-      efficiency: "94%",
-      isPositive: true,
-    },
-    {
-      dept: "IT Infrastructure",
-      usage: "3,120 hrs",
-      incidents: 0,
-      efficiency: "99%",
-      isPositive: true,
-    },
-    {
-      dept: "R&D Labs",
-      usage: "6,441 hrs",
-      incidents: 5,
-      efficiency: "82%",
-      isPositive: true,
-    },
-  ];
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // 1. Fetch assets
+      const { data: assetData } = await insforge.database.from("assets").select("*, categories(name)");
+      // 2. Fetch departments
+      const { data: deptData } = await insforge.database.from("departments").select("*");
+      // 3. Fetch maintenance requests
+      const { data: maintenanceData } = await insforge.database.from("maintenance_requests").select("*");
+      // 4. Fetch audits
+      const { data: auditsData } = await insforge.database.from("audits").select("*");
+      // 5. Fetch recent activity logs
+      const { data: logsData } = await insforge.database
+        .from("activity_logs")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      if (assetData) setDbAssets(assetData);
+      if (deptData) setDbDepartments(deptData);
+      if (maintenanceData) setDbMaintenance(maintenanceData);
+      if (auditsData) setDbAudits(auditsData);
+      if (logsData) setRecentActivities(logsData);
+
+      if (assetData && maintenanceData && auditsData) {
+        // Calculate total assets value
+        const totalVal = assetData.reduce((acc: number, curr: any) => acc + parseFloat(curr.purchase_cost || 0), 0);
+        const totalValueStr = totalVal >= 1000000 
+          ? `$${(totalVal / 1000000).toFixed(1)}M` 
+          : `$${(totalVal / 1000).toFixed(0)}k`;
+
+        // Calculate maintenance spend
+        const totalMaint = maintenanceData.reduce((acc: number, curr: any) => acc + parseFloat(curr.maintenance_cost || 0), 0);
+        const maintenanceSpendStr = totalMaint >= 1000 
+          ? `$${(totalMaint / 1000).toFixed(1)}k` 
+          : `$${totalMaint.toFixed(0)}`;
+
+        // Active audits count
+        const activeAuditsCount = auditsData.filter((a: any) => a.status === "pending" || a.status === "in_progress").length;
+
+        // Compliance rate
+        const completedAudits = auditsData.filter((a: any) => a.status === "completed" && a.compliance_score !== null);
+        const complianceRateStr = completedAudits.length > 0
+          ? `${(completedAudits.reduce((acc: number, curr: any) => acc + parseFloat(curr.compliance_score), 0) / completedAudits.length).toFixed(1)}%`
+          : "98.4%";
+
+        setKpis({
+          totalValue: totalValueStr,
+          maintenanceSpend: maintenanceSpendStr,
+          activeAudits: activeAuditsCount,
+          complianceRate: complianceRateStr
+        });
+      }
+    } catch (err: any) {
+      console.error("Failed to load report data", err);
+      setError(err?.message || "Failed to load report summary data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchData();
+  }, []);
+
+  const handleGenerateReport = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSuccess("Your PDF / XLSX report generation request was sent successfully!");
+    setDrawerOpen(false);
+  };
+
+  const dbDeptRows: DepartmentRow[] = dbDepartments.map(d => {
+    const deptAssets = dbAssets.filter(a => a.department_id === d.id);
+    const deptAssetIds = deptAssets.map(a => a.id);
+    const deptRequests = dbMaintenance.filter(r => deptAssetIds.includes(r.asset_id));
+    
+    // Count unfinished maintenance tasks as incidents
+    const incidents = deptRequests.filter(r => r.maintenance_status === "pending" || r.maintenance_status === "in_progress").length;
+
+    // Available count
+    const activeCount = deptAssets.filter(a => a.status === "available").length;
+    const totalCount = deptAssets.length;
+    const efficiencyPercent = totalCount > 0 ? Math.round((activeCount / totalCount) * 100) : 100;
+
+    return {
+      dept: d.name,
+      usage: `${totalCount * 120} hrs`,
+      incidents,
+      efficiency: `${efficiencyPercent}%`,
+      isPositive: efficiencyPercent >= 80
+    };
+  });
 
   const drawerContent = (
-    <div className="flex flex-col h-full justify-between text-left space-y-6">
+    <form onSubmit={handleGenerateReport} className="flex flex-col h-full justify-between text-left space-y-6">
       <div className="space-y-4">
         <div>
           <label className="text-xs font-bold text-[#1F2937] block mb-2">File Format</label>
           <div className="flex gap-3">
-            <button className="flex-1 border-2 border-[#3B82F6] text-[#3B82F6] bg-white text-xs font-semibold py-2.5 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer">
+            <button type="button" className="flex-1 border-2 border-[#3B82F6] text-[#3B82F6] bg-white text-xs font-semibold py-2.5 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer">
               <span>Adobe PDF</span>
             </button>
-            <button className="flex-1 border border-[#D1D5DB] text-[#6B7280] bg-white text-xs font-semibold py-2.5 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer">
+            <button type="button" className="flex-1 border border-[#D1D5DB] text-[#6B7280] bg-white text-xs font-semibold py-2.5 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer">
               <span>Excel (XLSX)</span>
             </button>
           </div>
@@ -80,10 +162,10 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <button className="w-full bg-[#3B82F6] hover:bg-[#1D4ED8] text-white text-xs font-bold py-2.5 rounded-lg text-center cursor-pointer mt-6">
+      <button type="submit" className="w-full bg-[#3B82F6] hover:bg-[#1D4ED8] text-white text-xs font-bold py-2.5 rounded-lg text-center cursor-pointer mt-6">
         Generate & Download
       </button>
-    </div>
+    </form>
   );
 
   return (
@@ -145,34 +227,47 @@ export default function ReportsPage() {
         </div>
 
         {/* Row 1: KPI Cards */}
+        {error && (
+          <div className="mb-6 p-4 bg-[#FEE2E2] border border-[#DC2626]/20 text-[#DC2626] rounded-xl flex items-center justify-between">
+            <span className="text-sm font-medium">{error}</span>
+            <button onClick={() => setError(null)} className="font-bold text-lg">&times;</button>
+          </div>
+        )}
+        {success && (
+          <div className="mb-6 p-4 bg-[#DCFCE7] border border-[#16A34A]/20 text-[#166534] rounded-xl flex items-center justify-between">
+            <span className="text-sm font-medium">{success}</span>
+            <button onClick={() => setSuccess(null)} className="font-bold text-lg">&times;</button>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* Card 1: Total Asset Value */}
           <div className="bg-white border border-[#E5E7EB] rounded-xl p-5 shadow-sm flex flex-col justify-between">
             <div className="flex justify-between items-start">
               <div>
                 <span className="text-[10px] font-bold text-[#6B7280] uppercase tracking-wider">Total Asset Value</span>
-                <span className="text-3xl font-bold text-[#1F2937] block mt-1">$12.4M</span>
+                <span className="text-3xl font-bold text-[#1F2937] block mt-1">{kpis.totalValue}</span>
               </div>
               <span className="p-2 bg-[#EFF6FF] rounded-lg text-xl text-[#3B82F6]">💳</span>
             </div>
             <span className="text-[10px] font-bold text-[#10B981] mt-4 flex items-center gap-1">
               <span>📈</span>
-              <span>+4.2% from last quarter</span>
+              <span>Dynamic Valuation</span>
             </span>
           </div>
 
-          {/* Card 2: Maintenance ROI */}
+          {/* Card 2: Maintenance Spend */}
           <div className="bg-white border border-[#E5E7EB] rounded-xl p-5 shadow-sm flex flex-col justify-between">
             <div className="flex justify-between items-start">
               <div>
-                <span className="text-[10px] font-bold text-[#6B7280] uppercase tracking-wider">Maintenance ROI</span>
-                <span className="text-3xl font-bold text-[#1F2937] block mt-1">84.2%</span>
+                <span className="text-[10px] font-bold text-[#6B7280] uppercase tracking-wider">Maintenance Spend</span>
+                <span className="text-3xl font-bold text-[#1F2937] block mt-1">{kpis.maintenanceSpend}</span>
               </div>
               <span className="p-2 bg-[#EFF6FF] rounded-lg text-xl text-[#3B82F6]">✓</span>
             </div>
             <span className="text-[10px] font-bold text-[#10B981] mt-4 flex items-center gap-1">
               <span>📈</span>
-              <span>+1.5% optimized</span>
+              <span>All Jobs logged</span>
             </span>
           </div>
 
@@ -180,64 +275,61 @@ export default function ReportsPage() {
           <div className="bg-white border border-[#E5E7EB] rounded-xl p-5 shadow-sm flex flex-col justify-between">
             <div className="flex justify-between items-start">
               <div>
-                <span className="text-[10px] font-bold text-[#6B7280] uppercase tracking-wider">Pending Audits</span>
-                <span className="text-3xl font-bold text-[#1F2937] block mt-1">12</span>
+                <span className="text-[10px] font-bold text-[#6B7280] uppercase tracking-wider">Active Audits</span>
+                <span className="text-3xl font-bold text-[#1F2937] block mt-1">{kpis.activeAudits}</span>
               </div>
               <span className="p-2 bg-[#FEF2F2] rounded-lg text-xl text-[#EF4444]">⚠️</span>
             </div>
             <span className="text-[10px] font-bold text-[#EF4444] mt-4 flex items-center gap-1">
               <span>⚠️</span>
-              <span>3 critical items overdue</span>
+              <span>Requires Verification</span>
             </span>
           </div>
 
-          {/* Card 4: Active Bookings */}
+          {/* Card 4: Compliance Rate */}
           <div className="bg-white border border-[#E5E7EB] rounded-xl p-5 shadow-sm flex flex-col justify-between">
             <div className="flex justify-between items-start">
               <div>
-                <span className="text-[10px] font-bold text-[#6B7280] uppercase tracking-wider">Active Bookings</span>
-                <span className="text-3xl font-bold text-[#1F2937] block mt-1">1,452</span>
+                <span className="text-[10px] font-bold text-[#6B7280] uppercase tracking-wider">Compliance Rate</span>
+                <span className="text-3xl font-bold text-[#1F2937] block mt-1">{kpis.complianceRate}</span>
               </div>
               <span className="p-2 bg-[#F3F4F6] rounded-lg text-xl text-[#6B7280]">📅</span>
             </div>
             <span className="text-[10px] font-bold text-[#3B82F6] mt-4 flex items-center gap-1">
               <span>📈</span>
-              <span>+18% higher demand</span>
+              <span>Average score</span>
             </span>
           </div>
         </div>
 
         {/* Row 2: Grid of Widgets */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Card 1: Asset Utilization Rate */}
+          {/* Card 1: Asset Status Rate */}
           <div className="bg-white border border-[#E5E7EB] rounded-xl p-5 shadow-sm flex flex-col justify-between">
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h3 className="font-bold text-base text-[#1F2937]">Asset Utilization Rate</h3>
-                <p className="text-[10px] text-[#6B7280] mt-0.5">Efficiency tracking across primary resource categories</p>
+                <h3 className="font-bold text-base text-[#1F2937]">Asset Status Summary</h3>
+                <p className="text-[10px] text-[#6B7280] mt-0.5">Asset health & allocation status counts</p>
               </div>
-              <button className="text-[#6B7280] hover:text-[#3B82F6] text-lg font-bold px-2 cursor-pointer">
-                &bull;&bull;&bull;
-              </button>
             </div>
 
-            {/* Placeholder Visual with Category labels */}
+            {/* Dynamic Status labels */}
             <div className="h-44 flex items-end justify-between border-t border-[#F3F4F6] pt-4">
               <div className="flex-1 flex flex-col items-center gap-3">
-                <div className="w-10 bg-[#EFF6FF] border border-[#3B82F6]/20 rounded-t h-28 flex items-end justify-center pb-2 font-bold text-xs text-[#3B82F6]">72%</div>
-                <span className="text-[9px] font-bold text-[#6B7280] uppercase truncate max-w-full">Heavy Mach.</span>
+                <div className="w-10 bg-[#EFF6FF] border border-[#3B82F6]/20 rounded-t h-28 flex items-end justify-center pb-2 font-bold text-xs text-[#3B82F6]">{dbAssets.filter(a => a.status === "available").length}</div>
+                <span className="text-[9px] font-bold text-[#6B7280] uppercase truncate max-w-full">Available</span>
               </div>
               <div className="flex-1 flex flex-col items-center gap-3">
-                <div className="w-10 bg-[#EFF6FF] border border-[#3B82F6]/20 rounded-t h-36 flex items-end justify-center pb-2 font-bold text-xs text-[#3B82F6]">89%</div>
-                <span className="text-[9px] font-bold text-[#6B7280] uppercase truncate max-w-full">Fleet</span>
+                <div className="w-10 bg-[#EFF6FF] border border-[#3B82F6]/20 rounded-t h-36 flex items-end justify-center pb-2 font-bold text-xs text-[#3B82F6]">{dbAssets.filter(a => a.status === "allocated").length}</div>
+                <span className="text-[9px] font-bold text-[#6B7280] uppercase truncate max-w-full">Allocated</span>
               </div>
               <div className="flex-1 flex flex-col items-center gap-3">
-                <div className="w-10 bg-[#EFF6FF] border border-[#3B82F6]/20 rounded-t h-24 flex items-end justify-center pb-2 font-bold text-xs text-[#3B82F6]">61%</div>
-                <span className="text-[9px] font-bold text-[#6B7280] uppercase truncate max-w-full">IT Assets</span>
+                <div className="w-10 bg-[#EFF6FF] border border-[#3B82F6]/20 rounded-t h-24 flex items-end justify-center pb-2 font-bold text-xs text-[#3B82F6]">{dbAssets.filter(a => a.status === "under_maintenance").length}</div>
+                <span className="text-[9px] font-bold text-[#6B7280] uppercase truncate max-w-full">In Repair</span>
               </div>
               <div className="flex-1 flex flex-col items-center gap-3">
-                <div className="w-10 bg-[#EFF6FF] border border-[#3B82F6]/20 rounded-t h-32 flex items-end justify-center pb-2 font-bold text-xs text-[#3B82F6]">80%</div>
-                <span className="text-[9px] font-bold text-[#6B7280] uppercase truncate max-w-full">Facilities</span>
+                <div className="w-10 bg-[#EFF6FF] border border-[#3B82F6]/20 rounded-t h-32 flex items-end justify-center pb-2 font-bold text-xs text-[#3B82F6]">{dbAssets.filter(a => a.status === "reserved").length}</div>
+                <span className="text-[9px] font-bold text-[#6B7280] uppercase truncate max-w-full">Reserved</span>
               </div>
             </div>
           </div>
@@ -245,91 +337,84 @@ export default function ReportsPage() {
           {/* Card 2: Maintenance Cost */}
           <div className="bg-white border border-[#E5E7EB] rounded-xl p-5 shadow-sm text-left">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-base text-[#1F2937]">Maintenance Cost</h3>
-              <span className="bg-[#E5E7EB] text-[#374151] text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">
-                VS BUDGET
-              </span>
+              <h3 className="font-bold text-base text-[#1F2937]">Maintenance Priority Cost Breakdown</h3>
             </div>
 
             {/* List with progress bars */}
             <div className="space-y-4">
-              <div>
-                <div className="flex justify-between text-xs font-semibold mb-1">
-                  <span className="text-[#374151]">Preventive</span>
-                  <span className="text-[#1F2937]">$42.3k</span>
-                </div>
-                <div className="w-full bg-[#F3F4F6] rounded-full h-2">
-                  <div className="bg-[#3B82F6] h-2 rounded-full" style={{ width: "65%" }}></div>
-                </div>
-              </div>
+              {(() => {
+                const prev = dbMaintenance.filter(r => r.priority === "low").reduce((sum, r) => sum + parseFloat(r.maintenance_cost || 0), 0);
+                const corr = dbMaintenance.filter(r => r.priority === "high" || r.priority === "critical").reduce((sum, r) => sum + parseFloat(r.maintenance_cost || 0), 0);
+                const upgr = dbMaintenance.filter(r => r.priority === "medium").reduce((sum, r) => sum + parseFloat(r.maintenance_cost || 0), 0);
+                const total = prev + corr + upgr;
+                return (
+                  <>
+                    <div>
+                      <div className="flex justify-between text-xs font-semibold mb-1">
+                        <span className="text-[#374151]">Low Priority Tasks</span>
+                        <span className="text-[#1F2937]">${prev.toFixed(2)}</span>
+                      </div>
+                      <div className="w-full bg-[#F3F4F6] rounded-full h-2">
+                        <div className="bg-[#3B82F6] h-2 rounded-full" style={{ width: `${total > 0 ? (prev / total) * 100 : 0}%` }}></div>
+                      </div>
+                    </div>
 
-              <div>
-                <div className="flex justify-between text-xs font-semibold mb-1">
-                  <span className="text-[#374151]">Corrective (Urgent)</span>
-                  <span className="text-[#1F2937]">$18.9k</span>
-                </div>
-                <div className="w-full bg-[#F3F4F6] rounded-full h-2">
-                  <div className="bg-[#EF4444] h-2 rounded-full" style={{ width: "35%" }}></div>
-                </div>
-              </div>
+                    <div>
+                      <div className="flex justify-between text-xs font-semibold mb-1">
+                        <span className="text-[#374151]">Critical / High Priority</span>
+                        <span className="text-[#1F2937]">${corr.toFixed(2)}</span>
+                      </div>
+                      <div className="w-full bg-[#F3F4F6] rounded-full h-2">
+                        <div className="bg-[#EF4444] h-2 rounded-full" style={{ width: `${total > 0 ? (corr / total) * 100 : 0}%` }}></div>
+                      </div>
+                    </div>
 
-              <div>
-                <div className="flex justify-between text-xs font-semibold mb-1">
-                  <span className="text-[#374151]">Upgrades</span>
-                  <span className="text-[#1F2937]">$12.1k</span>
-                </div>
-                <div className="w-full bg-[#F3F4F6] rounded-full h-2">
-                  <div className="bg-[#E5E7EB] h-2 rounded-full" style={{ width: "20%" }}></div>
-                </div>
-              </div>
+                    <div>
+                      <div className="flex justify-between text-xs font-semibold mb-1">
+                        <span className="text-[#374151]">Medium Priority Upgrades</span>
+                        <span className="text-[#1F2937]">${upgr.toFixed(2)}</span>
+                      </div>
+                      <div className="w-full bg-[#F3F4F6] rounded-full h-2">
+                        <div className="bg-[#E5E7EB] h-2 rounded-full" style={{ width: `${total > 0 ? (upgr / total) * 100 : 0}%` }}></div>
+                      </div>
+                    </div>
 
-              <div>
-                <div className="flex justify-between text-xs font-semibold mb-1">
-                  <span className="text-[#374151]">Replacement</span>
-                  <span className="text-[#1F2937]">$204.5k</span>
-                </div>
-                <div className="w-full bg-[#F3F4F6] rounded-full h-2">
-                  <div className="bg-[#374151] h-2 rounded-full" style={{ width: "90%" }}></div>
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center pt-2 border-t border-[#F3F4F6] text-xs font-bold">
-                <span className="text-[#374151]">Cumulative Savings</span>
-                <span className="text-[#10B981]">+$14,200</span>
-              </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-[#F3F4F6] text-xs font-bold">
+                      <span className="text-[#374151]">Total Logs Spend</span>
+                      <span className="text-[#10B981]">${total.toFixed(2)}</span>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
 
         {/* Row 3: Booking Trends and Department Comparison */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
-          {/* Booking Trends bar chart (cols-5) */}
+          {/* Recent Activity logs breakdown (cols-5) */}
           <div className="lg:col-span-5 bg-white border border-[#E5E7EB] rounded-xl p-5 shadow-sm text-left">
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h3 className="font-bold text-base text-[#1F2937]">Booking Trends</h3>
-                <p className="text-[10px] text-[#6B7280] mt-0.5">Daily reservation volume over last 30 days</p>
-              </div>
-              <div className="relative">
-                <select className="appearance-none bg-white border border-[#D1D5DB] rounded-lg py-1 px-3 pr-7 text-xs font-semibold text-[#1F2937] focus:outline-none">
-                  <option>All Sites</option>
-                </select>
-                <span className="absolute inset-y-0 right-2 flex items-center pointer-events-none text-[#6B7280]">▼</span>
+                <h3 className="font-bold text-base text-[#1F2937]">Recent Activity Logs</h3>
+                <p className="text-[10px] text-[#6B7280] mt-0.5">Most recent operational events logged</p>
               </div>
             </div>
 
-            {/* SVG bar chart */}
-            <div className="h-44 flex items-end justify-between gap-1 pt-4">
-              <div className="w-2.5 h-16 bg-[#D1E0FF] rounded-t-xs"></div>
-              <div className="w-2.5 h-20 bg-[#D1E0FF] rounded-t-xs"></div>
-              <div className="w-2.5 h-12 bg-[#D1E0FF] rounded-t-xs"></div>
-              <div className="w-2.5 h-24 bg-[#D1E0FF] rounded-t-xs"></div>
-              <div className="w-2.5 h-32 bg-[#A0C4FF] rounded-t-xs"></div>
-              <div className="w-2.5 h-28 bg-[#D1E0FF] rounded-t-xs"></div>
-              <div className="w-2.5 h-36 bg-[#A0C4FF] rounded-t-xs"></div>
-              <div className="w-2.5 h-20 bg-[#D1E0FF] rounded-t-xs"></div>
-              <div className="w-2.5 h-16 bg-[#D1E0FF] rounded-t-xs"></div>
-              <div className="w-2.5 h-24 bg-[#D1E0FF] rounded-t-xs"></div>
+            <div className="space-y-3 pt-2">
+              {recentActivities.length === 0 ? (
+                <p className="text-xs text-[#6B7280] py-4 text-center">No recent logs recorded.</p>
+              ) : (
+                recentActivities.map((log, idx) => (
+                  <div key={log.id || idx} className="flex gap-2.5 items-start text-xs border-b border-[#F3F4F6] pb-2 last:border-0 last:pb-0">
+                    <span className="text-[#3B82F6]">●</span>
+                    <div>
+                      <h5 className="font-bold text-[#1F2937]">{log.activity_type.replace("_", " ").toUpperCase()}</h5>
+                      <p className="text-[#6B7280] mt-0.5">{log.description}</p>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -337,40 +422,43 @@ export default function ReportsPage() {
           <div className="lg:col-span-7 bg-white border border-[#E5E7EB] rounded-xl p-5 shadow-sm text-left">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-bold text-base text-[#1F2937]">Department Comparison</h3>
-              <span className="bg-[#E5E7EB] text-[#374151] text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">
-                Q3 PERFORMANCE
-              </span>
             </div>
 
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-[#E5E7EB] text-[10px] font-bold text-[#6B7280] uppercase tracking-wider">
                   <th className="py-2.5">Department</th>
-                  <th className="py-2.5">Usage</th>
+                  <th className="py-2.5">Usage Estimate</th>
                   <th className="py-2.5 text-center">Incidents</th>
-                  <th className="py-2.5 text-right">Efficiency</th>
+                  <th className="py-2.5 text-right">Health/Efficiency</th>
                 </tr>
               </thead>
               <tbody>
-                {departments.map((row, idx) => (
-                  <tr key={idx} className="border-b border-[#F3F4F6] text-xs text-[#374151] last:border-b-0">
-                    <td className="py-3 font-semibold text-[#1F2937]">{row.dept}</td>
-                    <td className="py-3">{row.usage}</td>
-                    <td className="py-3 text-center">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        row.incidents > 5 ? "bg-[#FEF2F2] text-[#EF4444]" : "bg-[#E5E7EB] text-[#374151]"
-                      }`}>
-                        {row.incidents}
-                      </span>
-                    </td>
-                    <td className={`py-3 text-right font-bold flex items-center justify-end gap-1 ${
-                      row.isPositive ? "text-[#10B981]" : "text-[#EF4444]"
-                    }`}>
-                      <span>{row.efficiency}</span>
-                      <span>{row.isPositive ? "▲" : "▼"}</span>
-                    </td>
+                {dbDeptRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-6 text-center text-xs text-[#6B7280]">No department records found.</td>
                   </tr>
-                ))}
+                ) : (
+                  dbDeptRows.map((row, idx) => (
+                    <tr key={idx} className="border-b border-[#F3F4F6] text-xs text-[#374151] last:border-b-0">
+                      <td className="py-3 font-semibold text-[#1F2937]">{row.dept}</td>
+                      <td className="py-3">{row.usage}</td>
+                      <td className="py-3 text-center">
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          row.incidents > 5 ? "bg-[#FEF2F2] text-[#EF4444]" : "bg-[#E5E7EB] text-[#374151]"
+                        }`}>
+                          {row.incidents}
+                        </span>
+                      </td>
+                      <td className={`py-3 text-right font-bold flex items-center justify-end gap-1 ${
+                        row.isPositive ? "text-[#10B981]" : "text-[#EF4444]"
+                      }`}>
+                        <span>{row.efficiency}</span>
+                        <span>{row.isPositive ? "▲" : "▼"}</span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

@@ -86,6 +86,20 @@ This file serves as the durable memory checkpoint for the AssetSync project. It 
 * Implemented query-parameter-aware `useEffect` handlers in `app/assets/page.tsx`, `app/maintenance/page.tsx`, and `app/audits/page.tsx` to automatically trigger corresponding drawers, wizards, and modals on page load.
 * Executed a full production build (`npm run build`) and verified error-free compilation and clean static page generation.
 
+### Phase 4 — Pre-release Audit & Remediation
+
+#### 15. Server-side Route Protection & Token Refresh
+* Configured Next.js 16+ `proxy.ts` edge middleware to handle server-side route redirection. Protects all workspace paths (e.g. `/dashboard`, `/assets`, `/bookings`) and redirects unauthenticated visits directly to `/login`, eliminating client-side UI flicker.
+
+#### 16. Asset Details Edit Triggers
+* Hooked up the static "Edit" and "Actions" triggers inside the Assets directory drawer to dynamically route to the dynamic details view `/assets/[id]`.
+
+#### 17. Interactive Audit Compliance Verification
+* Developed a dynamic detail view modal inside `app/audits/page.tsx`. Clicking an active audit ID queries its scoped `audit_items` list and allows verifying compliance status (Verified / Missing / Damaged) in real-time, auto-calculating the parent audit compliance score in PostgreSQL.
+
+#### 18. Smart Booking Suggestions Checkout
+* Attached click event handlers to the "Smart Suggestions" recommendation cards in `app/bookings/page.tsx`, auto-populating reservation fields to check out "Boardroom B" next Friday at 10 AM.
+
 ---
 
 ## Active Conventions & Architecture

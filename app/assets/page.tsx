@@ -16,6 +16,7 @@ interface Employee {
   name: string;
   email: string;
   role: string;
+  department_id?: string | null;
 }
 
 interface AssetFile {
@@ -56,6 +57,7 @@ export default function AssetsPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
   // Filter & UI State
@@ -163,7 +165,15 @@ export default function AssetsPage() {
       if (empError) throw empError;
       setEmployees(empData || []);
 
-      // 3. Fetch Assets
+      // 3. Fetch Departments
+      const { data: deptData, error: deptError } = await insforge.database
+        .from("departments")
+        .select("*")
+        .order("name", { ascending: true });
+      if (deptError) throw deptError;
+      setDepartments(deptData || []);
+
+      // 4. Fetch Assets
       const { data: assetData, error: assetError } = await insforge.database
         .from("assets")
         .select("*")
@@ -183,96 +193,16 @@ export default function AssetsPage() {
     }
   }, [loadingAuth]);
 
-  // Default Mock data for visual matching if DB is empty
-  const defaultMockAssets: Asset[] = [
-    {
-      id: "AST-2024-001",
-      asset_tag: "AST-2024-001",
-      name: "MacBook Pro M3 Max - 16\"",
-      category_id: "cat-1",
-      serial_number: "C02Z88A9MD6T",
-      acquisition_date: "2024-01-12",
-      acquisition_cost: 3499,
-      condition: "new",
-      location: "San Francisco HQ, Floor 4, Desk 204",
-      current_holder_id: "emp-1",
-      status: "allocated",
-      is_shared: false,
-      documents: [],
-      photos: [],
-      created_at: new Date().toISOString(),
-      department: "Engineering"
-    },
-    {
-      id: "AST-2024-042",
-      asset_tag: "AST-2024-042",
-      name: "Dell UltraSharp 32\" 4K",
-      category_id: "cat-2",
-      serial_number: "CN-0842-XYZ",
-      acquisition_date: "2024-02-15",
-      acquisition_cost: 999,
-      condition: "good",
-      location: "San Francisco HQ, Floor 4, Desk 205",
-      current_holder_id: "emp-2",
-      status: "allocated",
-      is_shared: false,
-      documents: [],
-      photos: [],
-      created_at: new Date().toISOString(),
-      department: "Design"
-    },
-    {
-      id: "AST-2023-912",
-      asset_tag: "AST-2023-912",
-      name: "Cisco Catalyst 9300",
-      category_id: "cat-3",
-      serial_number: "FCW2210C05Y",
-      acquisition_date: "2023-09-10",
-      acquisition_cost: 4500,
-      condition: "good",
-      location: "Server Room B",
-      current_holder_id: null,
-      status: "available",
-      is_shared: true,
-      documents: [],
-      photos: [],
-      created_at: new Date().toISOString(),
-      department: "IT Infra"
-    },
-    {
-      id: "AST-2019-105",
-      asset_tag: "AST-2019-105",
-      name: "iPad Pro 11\" (2018)",
-      category_id: "cat-4",
-      serial_number: "DMPXG920KD",
-      acquisition_date: "2019-06-04",
-      acquisition_cost: 799,
-      condition: "fair",
-      location: "Warehouse A",
-      current_holder_id: "emp-3",
-      status: "allocated",
-      is_shared: false,
-      documents: [],
-      photos: [],
-      created_at: new Date().toISOString(),
-      department: "Operations"
-    }
-  ];
-
-  const displayedAssets = assets.length > 0 ? assets.map(a => {
-    // Add department name mapping if not present
+  const displayedAssets = assets.map(a => {
     const category = categories.find(c => c.id === a.category_id);
+    const holder = employees.find(e => e.id === a.current_holder_id);
+    const dept = holder ? departments.find(d => d.id === holder.department_id) : null;
     return {
       ...a,
-      department: a.location || "Operations",
+      department: dept?.name || a.location || "Operations",
       categoryName: category?.name || "Hardware"
     };
-  }) : defaultMockAssets.map(a => ({
-    ...a,
-    categoryName: a.category_id === "cat-1" ? "Workstations" :
-                  a.category_id === "cat-2" ? "Peripherals" :
-                  a.category_id === "cat-3" ? "Networking" : "Mobile Devices"
-  }));
+  });
 
   const filteredAssets = displayedAssets.filter(asset => {
     const matchesSearch =
@@ -370,10 +300,16 @@ export default function AssetsPage() {
       <div>
         {/* Close Button, Edit and Actions Row */}
         <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-4 mb-4">
-          <button className="text-sm font-semibold text-[#3661ED] hover:underline cursor-pointer">
+          <button
+            onClick={() => router.push(`/assets/${selectedAsset.id}`)}
+            className="text-sm font-semibold text-[#3661ED] hover:underline cursor-pointer"
+          >
             Edit
           </button>
-          <button className="bg-[#3661ED] hover:bg-[#1D4ED8] text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm cursor-pointer">
+          <button
+            onClick={() => router.push(`/assets/${selectedAsset.id}`)}
+            className="bg-[#3661ED] hover:bg-[#1D4ED8] text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm cursor-pointer"
+          >
             Actions
           </button>
         </div>
@@ -595,10 +531,7 @@ export default function AssetsPage() {
             <div>
               <span className="text-xs font-semibold text-[#718096] uppercase tracking-wider block">Total Assets</span>
               <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-2xl font-bold text-[#1A202C]">1,248</span>
-                <span className="text-xs font-semibold text-[#16A34A] flex items-center">
-                  +2.4% ↑
-                </span>
+                <span className="text-2xl font-bold text-[#1A202C]">{assets.length}</span>
               </div>
             </div>
           </div>
@@ -613,8 +546,12 @@ export default function AssetsPage() {
             <div>
               <span className="text-xs font-semibold text-[#718096] uppercase tracking-wider block">Assigned</span>
               <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-2xl font-bold text-[#1A202C]">1,048</span>
-                <span className="text-xs font-semibold text-[#718096]">84% Occupied</span>
+                <span className="text-2xl font-bold text-[#1A202C]">
+                  {assets.filter(a => a.status === 'allocated').length}
+                </span>
+                <span className="text-xs font-semibold text-[#718096]">
+                  {Math.round((assets.filter(a => a.status === 'allocated').length / (assets.length || 1)) * 100)}% Occupied
+                </span>
               </div>
             </div>
           </div>
@@ -630,10 +567,9 @@ export default function AssetsPage() {
               className="bg-white border border-[#E2E8F0] rounded-lg px-3 py-1.5 text-xs font-semibold text-[#2D3748] focus:outline-none focus:border-[#3661ED]"
             >
               <option value="all">All Departments</option>
-              <option value="engineering">Engineering</option>
-              <option value="design">Design</option>
-              <option value="it infra">IT Infra</option>
-              <option value="operations">Operations</option>
+              {departments.map(dept => (
+                <option key={dept.id} value={dept.name}>{dept.name}</option>
+              ))}
             </select>
           </div>
 
@@ -644,11 +580,10 @@ export default function AssetsPage() {
               onChange={(e) => setSelectedCategory(e.target.value)}
               className="bg-white border border-[#E2E8F0] rounded-lg px-3 py-1.5 text-xs font-semibold text-[#2D3748] focus:outline-none focus:border-[#3661ED]"
             >
-              <option value="all">Hardware</option>
-              <option value="workstations">Workstations</option>
-              <option value="peripherals">Peripherals</option>
-              <option value="networking">Networking</option>
-              <option value="mobile devices">Mobile Devices</option>
+              <option value="all">All Categories</option>
+              {categories.map(cat => (
+                <option key={cat.id} value={cat.name}>{cat.name}</option>
+              ))}
             </select>
           </div>
 

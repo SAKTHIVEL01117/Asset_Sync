@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import SidebarLayout from "../components/SidebarLayout";
+import { insforge } from "../lib/insforge/client";
 
 interface RecentActivityItem {
   id: string;
@@ -11,72 +12,173 @@ interface RecentActivityItem {
   description: string;
   time: string;
   color: string;
+  entity_name: string;
 }
 
 export default function DashboardPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    total: 0,
+    available: 0,
+    allocated: 0,
+    maintenance: 0
+  });
+  const [activities, setActivities] = useState<RecentActivityItem[]>([]);
+  const [upcoming, setUpcoming] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
 
-  const activities: RecentActivityItem[] = [
-    {
-      id: "AST-2024-001",
-      type: "register",
-      title: "Asset Registered",
-      description: 'New MacBook Pro 16" added to Inventory',
-      time: "12 MINUTES AGO",
-      color: "bg-[#3661ED]",
-    },
-    {
-      id: "AUD-B",
-      type: "audit",
-      title: "Audit Completed",
-      description: "Safety equipment audit for Warehouse B passed",
-      time: "2 HOURS AGO",
-      color: "bg-[#4A5568]",
-    },
-    {
-      id: "AST-7721",
-      type: "maintenance",
-      title: "Maintenance Flagged",
-      description: "Critical alert: Forklift #14 battery health low",
-      time: "4 HOURS AGO",
-      color: "bg-[#E53E3E]",
-    },
-  ];
+  useEffect(() => {
+    async function loadData() {
+      try {
+        setLoading(true);
+        // 1. Fetch Assets
+        const { data: assetData } = await insforge.database.from("assets").select("status");
+        if (assetData) {
+          const total = assetData.length;
+          const available = assetData.filter((a: any) => a.status === "available").length;
+          const allocated = assetData.filter((a: any) => a.status === "allocated").length;
+          const maintenance = assetData.filter((a: any) => a.status === "under_maintenance").length;
+          setStats({ total, available, allocated, maintenance });
+        }
 
-  const handleOpenDrawer = (assetId: string) => {
-    // Set mock data based on item clicked
-    if (assetId === "AST-2024-001") {
-      setSelectedAsset({
-        name: "MacBook Pro M3 Max - 16\"",
-        sku: "SKU: MAC-PRO-M3-16",
-        status: "ACTIVE",
-        location: "San Francisco HQ, Floor 4, Desk 204",
-        purchaseDate: "Jan 12, 2024",
-        initialValue: "$3,499.00 USD",
-        warrantyExp: "Jan 12, 2027",
-        logs: [
-          { title: "Physical Audit Completed", date: "Verified by Marcus Finch • 2 days ago" },
-          { title: "Assigned to Alex Rivera", date: "Location set to SF HQ Floor 4 • Jan 15, 2024" },
-          { title: "Purchased & Onboarded", date: "By Admin User • Jan 12, 2024" }
-        ]
-      });
-    } else {
-      setSelectedAsset({
-        name: "Industrial Chiller unit-09",
-        sku: "SKU: IND-CH-9920",
-        status: "ACTIVE",
-        location: "Chicago North, Zone A",
-        purchaseDate: "Jan 12, 2023",
-        initialValue: "$142,500.00",
-        warrantyExp: "Jan 12, 2026",
-        logs: [
-          { title: "Routine Filter Replacement", date: "Completed on July 10, 2024" },
-          { title: "Compressor Inspection", date: "Completed on May 14, 2024" }
-        ]
-      });
+        // 2. Fetch Activity Logs
+        const { data: logsData } = await insforge.database
+          .from("activity_logs")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(5);
+
+        if (logsData) {
+          const mappedLogs = logsData.map((log: any) => {
+            let color = "bg-[#3661ED]";
+            if (log.activity_type.includes("maint")) color = "bg-[#E53E3E]";
+            else if (log.activity_type.includes("audit")) color = "bg-[#4A5568]";
+
+            const timeDiff = Date.now() - new Date(log.created_at).getTime();
+            const minutes = Math.floor(timeDiff / 60000);
+            let timeStr = "JUST NOW";
+            if (minutes >= 1 && minutes < 60) timeStr = `${minutes} MINUTES AGO`;
+            else if (minutes >= 60) {
+              const hours = Math.floor(minutes / 60);
+              if (hours < 24) timeStr = `${hours} HOURS AGO`;
+              else timeStr = `${Math.floor(hours / 24)} DAYS AGO`;
+            }
+
+            return {
+              id: log.entity_id,
+              type: log.activity_type,
+              title: log.activity_type.replace(/_/g, " ").toUpperCase(),
+              description: log.description,
+              time: timeStr,
+              color,
+              entity_name: log.entity_name
+            };
+          });
+          setActivities(mappedLogs);
+        }
+
+        // 3. Fetch Departments
+        const { data: depts } = await insforge.database.from("departments").select("*");
+        if (depts) {
+          setDepartments(depts);
+        }
+
+        // 4. Fetch Upcoming Tasks (bookings and maintenance)
+        const upcomingTasks: any[] = [];
+        try {
+          const { data: bookings } = await insforge.database
+            .from("resource_bookings")
+            .select("*, assets(name)")
+            .eq("booking_status", "approved")
+            .limit(3);
+
+          if (bookings) {
+            bookings.forEach((b: any) => {
+              upcomingTasks.push({
+                id: b.id,
+                title: `${b.assets?.name || "Shared Asset"} Booking`,
+                subtitle: `Purpose: ${b.purpose || "Resource Sync"}`,
+                icon: "📅"
+              });
+            });
+          }
+        } catch (e) {}
+
+        try {
+          const { data: maintenance } = await insforge.database
+            .from("maintenance_requests")
+            .select("*, assets(name)")
+            .neq("maintenance_status", "completed")
+            .neq("maintenance_status", "cancelled")
+            .limit(3);
+
+          if (maintenance) {
+            maintenance.forEach((m: any) => {
+              upcomingTasks.push({
+                id: m.id,
+                title: `${m.assets?.name || "Asset"} Maintenance`,
+                subtitle: `Issue: ${m.issue_description}`,
+                icon: "⚙️"
+              });
+            });
+          }
+        } catch (e) {}
+
+        setUpcoming(upcomingTasks.slice(0, 3));
+
+      } catch (err) {
+        console.error("Dashboard page loading failed", err);
+      } finally {
+        setLoading(false);
+      }
     }
-    setDrawerOpen(true);
+
+    void loadData();
+  }, []);
+
+  const handleOpenDrawer = async (act: RecentActivityItem) => {
+    try {
+      let assetId = act.id;
+      if (act.entity_name === "asset_allocations") {
+        const { data } = await insforge.database.from("asset_allocations").select("asset_id").eq("id", act.id).single();
+        if (data) assetId = data.asset_id;
+      } else if (act.entity_name === "maintenance_requests") {
+        const { data } = await insforge.database.from("maintenance_requests").select("asset_id").eq("id", act.id).single();
+        if (data) assetId = data.asset_id;
+      } else if (act.entity_name === "resource_bookings") {
+        const { data } = await insforge.database.from("resource_bookings").select("asset_id").eq("id", act.id).single();
+        if (data) assetId = data.asset_id;
+      }
+
+      const { data: assetData } = await insforge.database.from("assets").select("*").eq("id", assetId).single();
+      if (assetData) {
+        const logs: any[] = [];
+        try {
+          const { data: maint } = await insforge.database.from("maintenance_requests").select("issue_description, created_at").eq("asset_id", assetId);
+          if (maint) {
+            maint.forEach((m: any) => {
+              logs.push({ title: m.issue_description, date: new Date(m.created_at).toLocaleDateString() });
+            });
+          }
+        } catch (e) {}
+
+        setSelectedAsset({
+          name: assetData.name,
+          sku: `Tag: ${assetData.asset_tag}`,
+          status: assetData.status.toUpperCase(),
+          location: assetData.location || "Unknown Location",
+          purchaseDate: new Date(assetData.acquisition_date).toLocaleDateString(),
+          initialValue: `$${assetData.acquisition_cost.toLocaleString()}`,
+          warrantyExp: "N/A",
+          logs: logs.length > 0 ? logs : [{ title: "Asset Registered", date: new Date(assetData.created_at).toLocaleDateString() }]
+        });
+        setDrawerOpen(true);
+      }
+    } catch (err) {
+      console.error("Failed to fetch asset details for drawer", err);
+    }
   };
 
   const drawerContent = selectedAsset && (
@@ -211,13 +313,10 @@ export default function DashboardPage() {
           <div className="bg-white border border-[#E2E8F0] rounded-xl p-6 shadow-xs flex flex-col justify-between">
             <div>
               <span className="text-xs font-bold text-[#A0AEC0] uppercase tracking-wider">Total Assets</span>
-              <span className="text-3xl font-bold text-[#1A202C] block mt-2">12,842</span>
+              <span className="text-3xl font-bold text-[#1A202C] block mt-2">{stats.total}</span>
             </div>
             <div className="flex items-center gap-1.5 mt-4 text-[#16A34A] text-xs font-semibold">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
-              <span>+4.2% from last month</span>
+              <span>Dynamic database count</span>
             </div>
           </div>
 
@@ -225,13 +324,13 @@ export default function DashboardPage() {
           <div className="bg-white border border-[#E2E8F0] rounded-xl p-6 shadow-xs flex flex-col justify-between">
             <div>
               <span className="text-xs font-bold text-[#A0AEC0] uppercase tracking-wider">Available Assets</span>
-              <span className="text-3xl font-bold text-[#1A202C] block mt-2">8,110</span>
+              <span className="text-3xl font-bold text-[#1A202C] block mt-2">{stats.available}</span>
             </div>
             <div className="mt-4">
               <div className="w-full bg-[#F1F5F9] rounded-full h-2">
-                <div className="bg-[#3661ED] h-2 rounded-full" style={{ width: "63.1%" }}></div>
+                <div className="bg-[#3661ED] h-2 rounded-full" style={{ width: `${Math.round((stats.allocated / (stats.total || 1)) * 100)}%` }}></div>
               </div>
-              <span className="text-[10px] font-semibold text-[#475569] block mt-1.5">63.1% Utilization capacity</span>
+              <span className="text-[10px] font-semibold text-[#475569] block mt-1.5">{Math.round((stats.allocated / (stats.total || 1)) * 100)}% Utilization capacity</span>
             </div>
           </div>
 
@@ -239,28 +338,28 @@ export default function DashboardPage() {
           <div className="bg-white border border-[#E2E8F0] rounded-xl p-6 shadow-xs flex flex-col justify-between">
             <div>
               <span className="text-xs font-bold text-[#A0AEC0] uppercase tracking-wider">Allocated Assets</span>
-              <span className="text-3xl font-bold text-[#1A202C] block mt-2">4,215</span>
+              <span className="text-3xl font-bold text-[#1A202C] block mt-2">{stats.allocated}</span>
             </div>
-            <button className="flex items-center gap-1 mt-4 text-[#3661ED] text-xs font-semibold hover:underline cursor-pointer">
+            <Link href="/assets" className="flex items-center gap-1 mt-4 text-[#3661ED] text-xs font-semibold hover:underline cursor-pointer">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
-              <span>Assigned to 14 departments</span>
-            </button>
+              <span>Assigned in {departments.length} departments</span>
+            </Link>
           </div>
 
           {/* Card 4: Under Maintenance */}
           <div className="bg-white border border-[#E2E8F0] rounded-xl p-6 shadow-xs flex flex-col justify-between">
             <div>
               <span className="text-xs font-bold text-[#A0AEC0] uppercase tracking-wider">Under Maintenance</span>
-              <span className="text-3xl font-bold text-[#E53E3E] block mt-2">517</span>
+              <span className="text-3xl font-bold text-[#E53E3E] block mt-2">{stats.maintenance}</span>
             </div>
-            <button className="flex items-center gap-1.5 mt-4 text-[#E53E3E] text-xs font-semibold hover:underline cursor-pointer">
+            <Link href="/maintenance" className="flex items-center gap-1.5 mt-4 text-[#E53E3E] text-xs font-semibold hover:underline cursor-pointer">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
-              <span>▲ 12 Critical alerts</span>
-            </button>
+              <span>View maintenance requests</span>
+            </Link>
           </div>
         </div>
 
@@ -402,35 +501,27 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-[#1A202C] text-base">Upcoming</h3>
               <span className="bg-[#3661ED] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                3 Today
+                {upcoming.length} Tasks
               </span>
             </div>
 
             {/* List items */}
             <div className="space-y-4 flex-1">
-              <div className="flex gap-3 items-start border-b border-[#F1F5F9] pb-3.5">
-                <div className="p-2 bg-[#F1F5F9] rounded-lg text-[#475569]">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  </svg>
-                </div>
-                <div>
-                  <h4 className="text-sm font-semibold text-[#1A202C]">HVAC System Gen-4</h4>
-                  <p className="text-xs text-[#A0AEC0] mt-0.5">Schedule: 14:00 &bull; Tech: J. Doe</p>
-                </div>
-              </div>
-
-              <div className="flex gap-3 items-start">
-                <div className="p-2 bg-[#F1F5F9] rounded-lg text-[#475569]">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <div>
-                  <h4 className="text-sm font-semibold text-[#1A202C]">Fleet Van #202 Booking</h4>
-                  <p className="text-xs text-[#A0AEC0] mt-0.5">Pickup: 16:30 &bull; User: R. Chen</p>
-                </div>
-              </div>
+              {upcoming.length === 0 ? (
+                <p className="text-xs text-[#A0AEC0] text-center py-4">No upcoming bookings or maintenance.</p>
+              ) : (
+                upcoming.map((task, idx) => (
+                  <div key={task.id || idx} className="flex gap-3 items-start border-b border-[#F1F5F9] pb-3.5 last:border-0 last:pb-0">
+                    <div className="p-2 bg-[#F1F5F9] rounded-lg text-[#475569]">
+                      <span className="text-lg">{task.icon}</span>
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold text-[#1A202C]">{task.title}</h4>
+                      <p className="text-xs text-[#A0AEC0] mt-0.5">{task.subtitle}</p>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -440,27 +531,31 @@ export default function DashboardPage() {
 
             {/* Timeline component */}
             <div className="space-y-4 flex-1">
-              {activities.map((act) => (
-                <div
-                  key={act.id}
-                  onClick={() => handleOpenDrawer(act.id)}
-                  className="flex gap-3 items-start group cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg -mx-1.5 transition-colors"
-                >
-                  {/* Indicator bullet */}
-                  <span className={`w-2.5 h-2.5 rounded-full ${act.color} mt-1.5 shrink-0 block`} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <h4 className="text-sm font-semibold text-[#1A202C] group-hover:text-[#3661ED] truncate">
-                        {act.title}
-                      </h4>
-                      <span className="text-[8px] font-bold text-[#A0AEC0] uppercase tracking-wider shrink-0">
-                        {act.time}
-                      </span>
+              {activities.length === 0 ? (
+                <p className="text-xs text-[#A0AEC0] text-center py-4">No recent activity logs.</p>
+              ) : (
+                activities.map((act) => (
+                  <div
+                    key={act.id}
+                    onClick={() => handleOpenDrawer(act)}
+                    className="flex gap-3 items-start group cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg -mx-1.5 transition-colors"
+                  >
+                    {/* Indicator bullet */}
+                    <span className={`w-2.5 h-2.5 rounded-full ${act.color} mt-1.5 shrink-0 block`} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <h4 className="text-sm font-semibold text-[#1A202C] group-hover:text-[#3661ED] truncate">
+                          {act.title}
+                        </h4>
+                        <span className="text-[8px] font-bold text-[#A0AEC0] uppercase tracking-wider shrink-0">
+                          {act.time}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#6B7280] truncate mt-0.5">{act.description}</p>
                     </div>
-                    <p className="text-xs text-[#6B7280] truncate mt-0.5">{act.description}</p>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>

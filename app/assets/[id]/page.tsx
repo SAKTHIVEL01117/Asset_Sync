@@ -92,6 +92,12 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
 
   // Alert State
   const [error, setError] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const photoInputRef = React.useRef<HTMLInputElement>(null);
+  const docInputRef = React.useRef<HTMLInputElement>(null);
 
   // Fetch current user and verify auth
   useEffect(() => {
@@ -150,73 +156,149 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
       if (assetError) throw assetError;
       setAsset(assetData as Asset);
 
-      // 4. Safely query Allocation History (try-catch in case table not yet created)
+      // 4. Safely query Allocation History
       try {
-        const { data: allocData } = await insforge.database
-          .from("allocations")
-          .select("id, employees(name), allocation_date, return_date, status")
+        const { data: allocData, error: allocErr } = await insforge.database
+          .from("asset_allocations")
+          .select("*")
           .eq("asset_id", id)
-          .order("allocation_date", { ascending: false });
+          .order("allocated_date", { ascending: false });
         
+        if (allocErr) throw allocErr;
+
         if (allocData) {
-          setAllocations(allocData.map((a: any) => ({
-            id: a.id,
-            employee_name: a.employees?.name || "Unknown",
-            allocated_date: a.allocation_date,
-            returned_date: a.return_date,
-            status: a.status
-          })));
+          setAllocations(allocData.map((a: any) => {
+            const emp = empData?.find((e: any) => e.id === a.user_id);
+            return {
+              id: a.id,
+              employee_name: emp?.name || "Unknown",
+              allocated_date: a.allocated_date,
+              returned_date: a.returned_date,
+              status: a.allocation_status
+            };
+          }));
         }
       } catch (e) {
-        console.log("Allocations table not yet available, displaying empty list");
+        console.error("Allocations fetch error", e);
       }
 
       // 5. Safely query Maintenance History
       try {
-        const { data: maintData } = await insforge.database
+        const { data: maintData, error: maintErr } = await insforge.database
           .from("maintenance_requests")
-          .select("id, employees(name), description, priority, status, created_at")
+          .select("*")
           .eq("asset_id", id)
           .order("created_at", { ascending: false });
 
+        if (maintErr) throw maintErr;
+
         if (maintData) {
-          setMaintenance(maintData.map((m: any) => ({
-            id: m.id,
-            reported_by_name: m.employees?.name || "Unknown",
-            description: m.description,
-            priority: m.priority,
-            status: m.status,
-            date: m.created_at
-          })));
+          setMaintenance(maintData.map((m: any) => {
+            const reportedBy = empData?.find((e: any) => e.id === m.reported_by);
+            return {
+              id: m.id,
+              reported_by_name: reportedBy?.name || "Unknown",
+              description: m.issue_description,
+              priority: m.priority?.toUpperCase(),
+              status: m.maintenance_status,
+              date: m.created_at
+            };
+          }));
         }
       } catch (e) {
-        console.log("Maintenance table not yet available, displaying empty list");
+        console.error("Maintenance table error", e);
       }
 
       // 6. Safely query Audit History
       try {
-        const { data: auditData } = await insforge.database
-          .from("audit_verifications")
-          .select("id, audits(name), employees(name), result, created_at")
+        const { data: itemsData, error: itemsErr } = await insforge.database
+          .from("audit_items")
+          .select("*")
           .eq("asset_id", id)
           .order("created_at", { ascending: false });
 
-        if (auditData) {
-          setAudits(auditData.map((au: any) => ({
-            id: au.id,
-            audit_name: au.audits?.name || "Verification",
-            auditor_name: au.employees?.name || "Auditor",
-            result: au.result,
-            date: au.created_at
-          })));
+        if (itemsErr) throw itemsErr;
+
+        if (itemsData) {
+          const auditIds = itemsData.map((item: any) => item.audit_id);
+          let dbAuditsList: any[] = [];
+          if (auditIds.length > 0) {
+            const { data: auds } = await insforge.database
+              .from("audits")
+              .select("*")
+              .in("id", auditIds);
+            dbAuditsList = auds || [];
+          }
+
+          setAudits(itemsData.map((item: any) => {
+            const auditObj = dbAuditsList.find((a: any) => a.id === item.audit_id);
+            const leadAuditor = empData?.find((e: any) => e.id === auditObj?.auditor);
+            return {
+              id: item.id,
+              audit_name: auditObj?.audit_name || "Asset Check",
+              auditor_name: leadAuditor?.name || "Unassigned",
+              result: item.verification_status?.toUpperCase() || "UNVERIFIED",
+              date: item.created_at
+            };
+          }));
         }
       } catch (e) {
-        console.log("Audits table not yet available, displaying empty list");
+        console.error("Audits table error", e);
       }
     } catch (err: any) {
       setError(err?.message || "Failed to load asset details.");
     } finally {
       setLoadingData(false);
+    }
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !asset) return;
+    setUploadingPhoto(true);
+    setUploadError(null);
+    try {
+      const { data, error: uploadErr } = await insforge.storage.from("assets").uploadAuto(file);
+      if (uploadErr) throw uploadErr;
+      if (data) {
+        const updatedPhotos = [...(asset.photos || []), { name: file.name, url: data.url, key: data.key }];
+        const { error: updateErr } = await insforge.database
+          .from("assets")
+          .update({ photos: updatedPhotos })
+          .eq("id", asset.id);
+        if (updateErr) throw updateErr;
+        setAsset({ ...asset, photos: updatedPhotos });
+      }
+    } catch (err: any) {
+      console.error(err);
+      setUploadError(err?.message || "Failed to upload photo.");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !asset) return;
+    setUploadingDoc(true);
+    setUploadError(null);
+    try {
+      const { data, error: uploadErr } = await insforge.storage.from("assets").uploadAuto(file);
+      if (uploadErr) throw uploadErr;
+      if (data) {
+        const updatedDocs = [...(asset.documents || []), { name: file.name, url: data.url, key: data.key }];
+        const { error: updateErr } = await insforge.database
+          .from("assets")
+          .update({ documents: updatedDocs })
+          .eq("id", asset.id);
+        if (updateErr) throw updateErr;
+        setAsset({ ...asset, documents: updatedDocs });
+      }
+    } catch (err: any) {
+      console.error(err);
+      setUploadError(err?.message || "Failed to upload document.");
+    } finally {
+      setUploadingDoc(false);
     }
   };
 
@@ -462,9 +544,32 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
 
           {/* Photos and Documents Sidebar */}
           <div className="space-y-8">
+            {uploadError && (
+              <div className="p-3 bg-[#FEE2E2] border border-[#DC2626]/20 text-[#DC2626] rounded-lg text-xs font-semibold flex justify-between items-center">
+                <span>{uploadError}</span>
+                <button onClick={() => setUploadError(null)} className="font-bold">&times;</button>
+              </div>
+            )}
+
             {/* Photos Panel */}
             <div className="bg-white border border-border-default rounded-xl p-6 shadow-sm">
-              <h2 className="text-base font-bold text-text-primary border-b border-border-light pb-3 mb-4">Photos</h2>
+              <div className="flex justify-between items-center border-b border-border-light pb-3 mb-4">
+                <h2 className="text-base font-bold text-text-primary">Photos</h2>
+                <button
+                  onClick={() => photoInputRef.current?.click()}
+                  className="text-xs text-[#3661ED] hover:underline font-semibold cursor-pointer"
+                >
+                  {uploadingPhoto ? "Uploading..." : "+ Upload"}
+                </button>
+                <input
+                  type="file"
+                  ref={photoInputRef}
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                  accept="image/*"
+                />
+              </div>
+
               {(!asset.photos || asset.photos.length === 0) ? (
                 <div className="text-sm text-text-muted text-center py-6 bg-secondary-surface/30 rounded-lg">
                   No images uploaded.
@@ -488,7 +593,22 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
 
             {/* Documents Panel */}
             <div className="bg-white border border-border-default rounded-xl p-6 shadow-sm">
-              <h2 className="text-base font-bold text-text-primary border-b border-border-light pb-3 mb-4">Attachments & Manuals</h2>
+              <div className="flex justify-between items-center border-b border-border-light pb-3 mb-4">
+                <h2 className="text-base font-bold text-text-primary">Attachments & Manuals</h2>
+                <button
+                  onClick={() => docInputRef.current?.click()}
+                  className="text-xs text-[#3661ED] hover:underline font-semibold cursor-pointer"
+                >
+                  {uploadingDoc ? "Uploading..." : "+ Attach"}
+                </button>
+                <input
+                  type="file"
+                  ref={docInputRef}
+                  onChange={handleDocUpload}
+                  className="hidden"
+                />
+              </div>
+
               {(!asset.documents || asset.documents.length === 0) ? (
                 <div className="text-sm text-text-muted text-center py-6 bg-secondary-surface/30 rounded-lg">
                   No documents attached.

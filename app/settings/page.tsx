@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import SidebarLayout from "../components/SidebarLayout";
+import { insforge } from "../lib/insforge/client";
 
 interface SettingsCard {
   id: string;
@@ -21,6 +22,110 @@ export default function SettingsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeCard, setActiveCard] = useState<string | null>(null);
 
+  const [deptCount, setDeptCount] = useState<number | null>(null);
+  const [userCount, setUserCount] = useState<number | null>(null);
+  const [catCount, setCatCount] = useState<number | null>(null);
+
+  const [dataResidency, setDataResidency] = useState("North America (East)");
+  const [brandingLogo, setBrandingLogo] = useState<string | null>(null);
+  const [brandingFavicon, setBrandingFavicon] = useState<string | null>(null);
+
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingFavicon, setUploadingFavicon] = useState(false);
+
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const logoInputRef = React.useRef<HTMLInputElement>(null);
+  const faviconInputRef = React.useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedResidency = localStorage.getItem("settings_data_residency");
+      if (savedResidency) setDataResidency(savedResidency);
+      
+      const savedLogo = localStorage.getItem("settings_branding_logo");
+      if (savedLogo) setBrandingLogo(savedLogo);
+      
+      const savedFavicon = localStorage.getItem("settings_branding_favicon");
+      if (savedFavicon) setBrandingFavicon(savedFavicon);
+    }
+  }, []);
+
+  useEffect(() => {
+    async function loadStats() {
+      try {
+        const { data: depts } = await insforge.database.from("departments").select("id");
+        if (depts) setDeptCount(depts.length);
+
+        const { data: emps } = await insforge.database.from("employees").select("id");
+        if (emps) setUserCount(emps.length);
+
+        const { data: cats } = await insforge.database.from("categories").select("id");
+        if (cats) setCatCount(cats.length);
+      } catch (err) {
+        console.error("Failed to load settings stats", err);
+      }
+    }
+    void loadStats();
+  }, []);
+
+  const handleSaveSettings = () => {
+    try {
+      setError(null);
+      setSuccess(null);
+      localStorage.setItem("settings_data_residency", dataResidency);
+      if (brandingLogo) localStorage.setItem("settings_branding_logo", brandingLogo);
+      if (brandingFavicon) localStorage.setItem("settings_branding_favicon", brandingFavicon);
+      
+      setSuccess("Settings configuration saved successfully!");
+      setDrawerOpen(false);
+    } catch (err: any) {
+      console.error(err);
+      setError("Failed to save settings.");
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingLogo(true);
+    setError(null);
+    try {
+      const { data, error: uploadErr } = await insforge.storage.from("assets").uploadAuto(file);
+      if (uploadErr) throw uploadErr;
+      if (data?.url) {
+        setBrandingLogo(data.url);
+        setSuccess("Primary logo uploaded successfully!");
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || "Failed to upload logo.");
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleFaviconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingFavicon(true);
+    setError(null);
+    try {
+      const { data, error: uploadErr } = await insforge.storage.from("assets").uploadAuto(file);
+      if (uploadErr) throw uploadErr;
+      if (data?.url) {
+        setBrandingFavicon(data.url);
+        setSuccess("Favicon uploaded successfully!");
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || "Failed to upload favicon.");
+    } finally {
+      setUploadingFavicon(false);
+    }
+  };
+
   const cards: SettingsCard[] = [
     {
       id: "org-profile",
@@ -37,7 +142,7 @@ export default function SettingsPage() {
       id: "departments",
       title: "Departments",
       desc: "Structure your organizational hierarchy, cost centers, and reporting lines.",
-      metric: "14 Active Units",
+      metric: deptCount !== null ? `${deptCount} Active Units` : "Loading...",
       iconBg: "bg-[#E0ECFB]",
       iconText: "text-[#2D60E0]",
       icon: "📦",
@@ -46,7 +151,7 @@ export default function SettingsPage() {
       id: "users-roles",
       title: "Users & Roles",
       desc: "Manage identity, RBAC permissions, and team memberships across the platform.",
-      metric: "824 Users",
+      metric: userCount !== null ? `${userCount} Users` : "Loading...",
       iconBg: "bg-[#E0ECFB]",
       iconText: "text-[#2D60E0]",
       icon: "👥",
@@ -55,7 +160,7 @@ export default function SettingsPage() {
       id: "categories",
       title: "Asset Categories",
       desc: "Define custom taxonomies, deprecation schedules, and attribute schemas.",
-      metric: "32 Schemas",
+      metric: catCount !== null ? `${catCount} Schemas` : "Loading...",
       iconBg: "bg-[#E0ECFB]",
       iconText: "text-[#2D60E0]",
       icon: "🗂️",
@@ -108,10 +213,14 @@ export default function SettingsPage() {
         <div>
           <label className="text-xs font-bold text-[#333333] block mb-1">Data Residency</label>
           <div className="relative">
-            <select className="w-full bg-white border border-[#E0E0E0] rounded-lg py-2 pl-3 pr-8 text-xs text-[#333333] focus:outline-none">
-              <option>North America (East)</option>
-              <option>Europe (West)</option>
-              <option>Asia Pacific (South)</option>
+            <select
+              value={dataResidency}
+              onChange={(e) => setDataResidency(e.target.value)}
+              className="w-full bg-white border border-[#E0E0E0] rounded-lg py-2 pl-3 pr-8 text-xs text-[#333333] focus:outline-none"
+            >
+              <option value="North America (East)">North America (East)</option>
+              <option value="Europe (West)">Europe (West)</option>
+              <option value="Asia Pacific (South)">Asia Pacific (South)</option>
             </select>
             <span className="absolute inset-y-0 right-2.5 flex items-center pointer-events-none text-[#6B7280]">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -125,17 +234,38 @@ export default function SettingsPage() {
         <div>
           <h4 className="font-bold text-xs text-[#333333] mb-2">Branding Assets</h4>
           <div className="grid grid-cols-2 gap-3">
-            <div className="border border-dashed border-[#E0E0E0] rounded-xl p-4 text-center cursor-pointer hover:bg-slate-50 flex flex-col items-center justify-center">
-              <svg className="w-5 h-5 text-[#6B7280] mb-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-              </svg>
-              <span className="text-[10px] font-semibold text-[#333333]">Primary Logo</span>
+            <div
+              onClick={() => logoInputRef.current?.click()}
+              className="border border-dashed border-[#E0E0E0] rounded-xl p-4 text-center cursor-pointer hover:bg-slate-50 flex flex-col items-center justify-center relative overflow-hidden aspect-video bg-slate-50"
+            >
+              {brandingLogo ? (
+                <img src={brandingLogo} alt="Logo" className="w-full h-full object-contain" />
+              ) : (
+                <>
+                  <svg className="w-5 h-5 text-[#6B7280] mb-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                  <span className="text-[10px] font-semibold text-[#333333]">{uploadingLogo ? "Uploading..." : "Primary Logo"}</span>
+                </>
+              )}
+              <input type="file" ref={logoInputRef} onChange={handleLogoUpload} className="hidden" accept="image/*" />
             </div>
-            <div className="border border-dashed border-[#E0E0E0] rounded-xl p-4 text-center cursor-pointer hover:bg-slate-50 flex flex-col items-center justify-center">
-              <svg className="w-5 h-5 text-[#6B7280] mb-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-              </svg>
-              <span className="text-[10px] font-semibold text-[#333333]">Favicon</span>
+
+            <div
+              onClick={() => faviconInputRef.current?.click()}
+              className="border border-dashed border-[#E0E0E0] rounded-xl p-4 text-center cursor-pointer hover:bg-slate-50 flex flex-col items-center justify-center relative overflow-hidden aspect-video bg-slate-50"
+            >
+              {brandingFavicon ? (
+                <img src={brandingFavicon} alt="Favicon" className="w-12 h-12 object-contain" />
+              ) : (
+                <>
+                  <svg className="w-5 h-5 text-[#6B7280] mb-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                  <span className="text-[10px] font-semibold text-[#333333]">{uploadingFavicon ? "Uploading..." : "Favicon"}</span>
+                </>
+              )}
+              <input type="file" ref={faviconInputRef} onChange={handleFaviconUpload} className="hidden" accept="image/*" />
             </div>
           </div>
         </div>
@@ -156,7 +286,10 @@ export default function SettingsPage() {
         >
           Cancel
         </button>
-        <button className="flex-1 bg-[#2D60E0] hover:bg-[#1D4ED8] text-white text-xs font-bold py-2.5 rounded-lg cursor-pointer">
+        <button
+          onClick={handleSaveSettings}
+          className="flex-1 bg-[#2D60E0] hover:bg-[#1D4ED8] text-white text-xs font-bold py-2.5 rounded-lg cursor-pointer"
+        >
           Save Changes
         </button>
       </div>
@@ -189,7 +322,10 @@ export default function SettingsPage() {
               </svg>
               <span>Export Config</span>
             </button>
-            <button className="flex items-center gap-1.5 bg-[#2D60E0] hover:bg-[#1D4ED8] text-white text-xs font-semibold py-2 px-4 rounded-lg shadow-sm cursor-pointer">
+            <button
+              onClick={handleSaveSettings}
+              className="flex items-center gap-1.5 bg-[#2D60E0] hover:bg-[#1D4ED8] text-white text-xs font-semibold py-2 px-4 rounded-lg shadow-sm cursor-pointer"
+            >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
               </svg>
@@ -197,6 +333,20 @@ export default function SettingsPage() {
             </button>
           </div>
         </div>
+
+        {/* Alerts */}
+        {error && (
+          <div className="mb-6 p-4 bg-[#FEE2E2] border border-[#DC2626]/20 text-[#DC2626] rounded-xl flex items-center justify-between">
+            <span className="text-sm font-medium">{error}</span>
+            <button onClick={() => setError(null)} className="font-bold text-lg">&times;</button>
+          </div>
+        )}
+        {success && (
+          <div className="mb-6 p-4 bg-[#DCFCE7] border border-[#16A34A]/20 text-[#166534] rounded-xl flex items-center justify-between">
+            <span className="text-sm font-medium">{success}</span>
+            <button onClick={() => setSuccess(null)} className="font-bold text-lg">&times;</button>
+          </div>
+        )}
 
         {/* Settings Card Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
