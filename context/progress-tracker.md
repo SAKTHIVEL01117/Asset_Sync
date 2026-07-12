@@ -8,9 +8,9 @@ Update this file after every completed feature. Any AI agent reading this should
 
 **Phase:** Phase 1 — Foundation
 
-**Last Completed:** Homepage Setup & Design
+**Last Completed:** Organization Setup (Departments, Categories & Employees)
 
-**Next:** Authentication (Signup & Login)
+**Next:** Asset Registration Page (07)
 
 ---
 
@@ -20,11 +20,10 @@ Update this file after every completed feature. Any AI agent reading this should
 
 - [x] 01 Project Setup
 - [x] 02 Homepage
-- [ ] 03 Authentication
-
-- [ ] 04 Role-Based Access Control
-- [ ] 05 Database Schema
-- [ ] 06 Organization Setup (Departments, Categories & Employees)
+- [x] 03 Authentication
+- [x] 04 Role-Based Access Control
+- [x] 05 Database Schema
+- [x] 06 Organization Setup (Departments, Categories & Employees)
 
 ### Phase 2 — Asset Management
 

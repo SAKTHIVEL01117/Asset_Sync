@@ -26,10 +26,34 @@ This file serves as the durable memory checkpoint for the AssetSync project. It 
 * Verified that the full production build compiles with **zero errors and warnings** (`next build`).
 * Updated progress tracking status in `context/progress-tracker.md`.
 
+#### 03. Authentication
+* Set up a portable local Node.js v24.18.0 environment in the workspace.
+* Logged in and linked the repository to the InsForge project `AssetSync` (`40fc81d0-0a59-4ed0-b86f-5d08bff77da6`).
+* Installed the `@insforge/sdk` package for the Next.js app.
+* Configured local environment variables in `.env.local` using the project's anon key retrieved from InsForge secrets.
+* Created SDK integration clients ([client.ts](file:///D:/projects/designs/Asset_Sync/app/lib/insforge/client.ts) and [server.ts](file:///D:/projects/designs/Asset_Sync/app/lib/insforge/server.ts)), session refresh route ([route.ts](file:///D:/projects/designs/Asset_Sync/app/api/auth/refresh/route.ts)), and Next.js 16+ session refresh [proxy.ts](file:///D:/projects/designs/Asset_Sync/proxy.ts).
+* Developed Server Actions in [actions.ts](file:///D:/projects/designs/Asset_Sync/app/actions.ts) for sign-in, sign-up, sign-out, OTP verification (required by project metadata), and social OAuth logins.
+* Designed a premium, responsive sign-in/sign-up/verification dashboard page in [page.tsx](file:///D:/projects/designs/Asset_Sync/app/login/page.tsx) with interactive modes, OTP code entry, and Google/GitHub login buttons.
+* Created the OAuth redirect callback route in [route.ts](file:///D:/projects/designs/Asset_Sync/app/api/auth/callback/route.ts) to securely exchange codes for sessions.
+* Verified that the full Next.js production build (`npm run build`) compiles with zero errors and warnings.
+
+#### 04. Role-Based Access Control, 05. Database Schema & 06. Organization Setup
+* Created and applied InsForge SQL migration file `20260712052803_schema-foundation.sql` establishing the core PostgreSQL tables: `departments` (hierarchical department tree), `employees` (durable user-to-employee records), and `categories` (asset groups).
+* Implemented Row-Level Security (RLS) policies on all tables, providing read-access to all authenticated users and strict write-access to administrators.
+* Wrote `public.get_current_user_role()` function using `SECURITY DEFINER` to securely inspect user roles without recursion.
+* Guarded employee roles and status fields from escalation via a `BEFORE UPDATE` trigger on `public.employees` that prevents non-admins from modifying role/status columns.
+* Connected user registrations to the database using an `AFTER INSERT` trigger on `auth.users` to automatically create an employee record with the `admin` role for the first signup and `employee` for subsequent ones.
+* Developed the main navigation component [Navbar.tsx](file:///D:/projects/designs/Asset_Sync/app/components/Navbar.tsx) mapping authenticated pages to user roles.
+* Created the `/organization` dashboard page in [page.tsx](file:///D:/projects/designs/Asset_Sync/app/organization/page.tsx) with interactive subviews and modals for managing departments, categories, and employees.
+* Created a clean operational portal landing page in [page.tsx](file:///D:/projects/designs/Asset_Sync/app/dashboard/page.tsx).
+* Verified the Next.js 16 build compiles successfully with zero warnings or errors.
+
 ---
 
 ## Active Conventions & Architecture
 
-* **Framework**: Next.js 16.2.10 (App Router), React 19.2.4, TypeScript 5, Tailwind CSS v4.
+* **Frontend Framework**: Next.js 16.2.10 (App Router), React 19.2.4, TypeScript 5, Tailwind CSS v4.
+* **Backend Platform**: InsForge BaaS (PostgreSQL, Auth, Storage, Edge Functions, Realtime, AI gateway).
+* **SDK client**: `@insforge/sdk@latest` with SSR integration helpers (`@insforge/sdk/ssr` and `@insforge/sdk/ssr/middleware`).
 * **Component Model**: Pure React/TSX inside the `app/` folder, styling with semantic CSS variables defined in `@theme` in `app/globals.css`.
 * **APIs**: Using asynchronous request-time APIs (`params`, `searchParams`, `cookies`, `headers`) strictly, complying with Next.js 16.

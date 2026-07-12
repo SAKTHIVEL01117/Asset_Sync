@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 
 export default function Home() {
   // FAQ accordion state
@@ -140,12 +141,12 @@ export default function Home() {
 
           {/* Actions */}
           <div className="flex items-center gap-4">
-            <button className="text-sm font-semibold text-text-secondary hover:text-primary transition-colors px-4 py-2 rounded-md">
+            <Link href="/login" className="text-sm font-semibold text-text-secondary hover:text-primary transition-colors px-4 py-2 rounded-md">
               Login
-            </button>
-            <button className="text-sm font-semibold bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-lg shadow-sm hover:shadow transition-all duration-150">
+            </Link>
+            <Link href="/login" className="text-sm font-semibold bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-lg shadow-sm hover:shadow transition-all duration-150">
               Get Started
-            </button>
+            </Link>
           </div>
         </div>
       </header>
@@ -169,9 +170,9 @@ export default function Home() {
             </p>
             
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full sm:w-auto pt-2">
-              <button className="flex items-center justify-center bg-primary hover:bg-primary-hover text-white text-base font-semibold px-6 py-3.5 rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-150 cursor-pointer">
+              <Link href="/login" className="flex items-center justify-center bg-primary hover:bg-primary-hover text-white text-base font-semibold px-6 py-3.5 rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-150 cursor-pointer">
                 Get Started Free
-              </button>
+              </Link>
               <button className="flex items-center justify-center gap-2 border border-border-default hover:border-primary/30 hover:bg-primary-light/10 text-text-primary text-base font-semibold px-6 py-3.5 rounded-xl transition-all duration-150 cursor-pointer">
                 <svg className="w-5 h-5 text-primary" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
