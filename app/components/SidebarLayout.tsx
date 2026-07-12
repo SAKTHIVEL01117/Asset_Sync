@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { insforge } from "../lib/insforge/client";
+import { handleSignOut } from "../actions";
 
 interface SidebarLayoutProps {
   children: React.ReactNode;
@@ -31,6 +32,7 @@ export default function SidebarLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [employee, setEmployee] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -42,6 +44,16 @@ export default function SidebarLayout({
           return;
         }
         setCurrentUser(data.user);
+
+        // Fetch employee details to check role
+        const { data: empData, error: empError } = await insforge.database
+          .from("employees")
+          .select("*")
+          .eq("user_id", data.user.id);
+
+        if (!empError && empData && empData.length > 0) {
+          setEmployee(empData[0]);
+        }
       } catch (err) {
         console.error("Auth check failed in SidebarLayout", err);
         router.push("/login");
@@ -62,6 +74,15 @@ export default function SidebarLayout({
         </svg>
       ),
     },
+    ...(employee?.role === "admin" ? [{
+      name: "Organization",
+      href: "/organization",
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+        </svg>
+      ),
+    }] : []),
     {
       name: "Assets",
       href: "/assets",
@@ -187,18 +208,34 @@ export default function SidebarLayout({
           </Link>
 
           {/* User profile widget */}
-          <div className="bg-[#2A2E33] p-3 rounded-xl flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#3661ED] rounded-full flex items-center justify-center font-bold text-white text-sm shadow shrink-0">
-              {userName.substring(0, 2).toUpperCase()}
+          <div className="bg-[#2A2E33] p-3 rounded-xl flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 bg-[#3661ED] rounded-full flex items-center justify-center font-bold text-white text-sm shadow shrink-0">
+                {(employee?.name || userName).substring(0, 2).toUpperCase()}
+              </div>
+              <div className="flex flex-col text-left min-w-0">
+                <span className="text-sm font-semibold text-white truncate leading-none mb-0.5">
+                  {employee?.name || userName}
+                </span>
+                <span className="text-[10px] text-[#A0AEC0] tracking-wider uppercase font-semibold">
+                  {employee?.role?.replace("_", " ") || userRole}
+                </span>
+              </div>
             </div>
-            <div className="flex flex-col text-left min-w-0">
-              <span className="text-sm font-semibold text-white truncate leading-none mb-0.5">
-                {userName}
-              </span>
-              <span className="text-[10px] text-[#A0AEC0] tracking-wider uppercase font-semibold">
-                {userRole}
-              </span>
-            </div>
+            
+            {/* Sign Out Button in Sidebar */}
+            <button
+              onClick={async () => {
+                await handleSignOut();
+                window.location.href = "/login";
+              }}
+              className="p-1.5 rounded-lg text-[#A0AEC0] hover:text-[#EF4444] hover:bg-white/5 transition-colors cursor-pointer shrink-0"
+              title="Sign Out"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </button>
           </div>
         </div>
       </aside>
@@ -243,9 +280,23 @@ export default function SidebarLayout({
             {/* User Dropdown */}
             <div className="flex items-center gap-2 border-l border-[#E2E8F0] pl-4">
               <div className="w-8 h-8 rounded-full bg-[#E0F2FE] text-[#3661ED] font-bold flex items-center justify-center text-xs shadow-sm">
-                {(currentUser?.email || "U").substring(0, 2).toUpperCase()}
+                {(employee?.name || currentUser?.email || "U").substring(0, 2).toUpperCase()}
               </div>
-              <span className="text-sm font-semibold text-[#475569]">{currentUser?.email || "Alex Rivera"}</span>
+              <span className="text-sm font-semibold text-[#475569] mr-2">{employee?.name || currentUser?.email || "Alex Rivera"}</span>
+              
+              {/* Sign Out Button in Header */}
+              <button
+                onClick={async () => {
+                  await handleSignOut();
+                  window.location.href = "/login";
+                }}
+                className="p-1.5 rounded-lg text-[#6B7280] hover:text-[#DC2626] hover:bg-[#FEE2E2]/50 transition-colors cursor-pointer"
+                title="Sign Out"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+              </button>
             </div>
           </div>
         </header>

@@ -67,6 +67,25 @@ This file serves as the durable memory checkpoint for the AssetSync project. It 
 * Implemented auth redirection and route protection: unauthenticated visits to app pages are automatically intercepted and redirected to `/login`, and authenticated visits to `/login` are automatically routed to `/dashboard`.
 * Verified that the full Next.js production build compiles with zero errors or warnings.
 
+### Phase 3 — Settings, Sign Out & Quick Actions Refactoring
+
+#### 12. Settings Availability & Layout Unification
+* Unified the sidebar navigation by integrating the **Organization** tab conditionally for administrators based on their dynamic employee role loaded from the `employees` table.
+* Replaced the horizontal `Navbar` on `/organization` with the standard `SidebarLayout` component, unifying styling, search, and global actions.
+* Added Sign Out action items to both the top header user dropdown and the bottom sidebar user widget.
+
+#### 13. Credentials/Session Invalidation
+* Programmed the Sign Out handlers to invoke the server action (`handleSignOut`) to delete backend session cookies, followed by a client-side hard-refresh redirect (`window.location.href = '/login'`). This completely invalidates browser-level in-memory variables and local session storage caches, forcing credential re-entry.
+
+#### 14. Dashboard Quick Actions Interception
+* Wired the Executive Overview quick actions to redirect to target views with search parameters:
+  * Register Asset -> `/assets?register=true`
+  * Book Resource -> `/bookings`
+  * Schedule Maintenance -> `/maintenance?schedule=true`
+  * Start Audit -> `/audits?start=true`
+* Implemented query-parameter-aware `useEffect` handlers in `app/assets/page.tsx`, `app/maintenance/page.tsx`, and `app/audits/page.tsx` to automatically trigger corresponding drawers, wizards, and modals on page load.
+* Executed a full production build (`npm run build`) and verified error-free compilation and clean static page generation.
+
 ---
 
 ## Active Conventions & Architecture

@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { insforge } from "../lib/insforge/client";
-import Navbar from "../components/Navbar";
+import SidebarLayout from "../components/SidebarLayout";
 
 interface Department {
   id: string;
@@ -286,10 +286,8 @@ export default function OrganizationPage() {
   }
 
   return (
-    <div className="min-h-screen bg-page-background text-text-primary flex flex-col font-sans">
-      <Navbar />
-
-      <main className="max-w-[1440px] mx-auto w-full px-6 py-8 flex-1 flex flex-col">
+    <SidebarLayout activePage="Organization" searchPlaceholder="Search departments, employees, or categories...">
+      <div className="max-w-[1440px] mx-auto w-full flex-1 flex flex-col">
         {/* Page Title & Breadcrumbs */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <div>
@@ -631,7 +629,7 @@ export default function OrganizationPage() {
             )}
           </div>
         )}
-      </main>
+      </div>
 
       {/* DEPARTMENT MODAL */}
       {showDeptModal && (
@@ -835,6 +833,6 @@ export default function OrganizationPage() {
           </div>
         </div>
       )}
-    </div>
+    </SidebarLayout>
   );
 }

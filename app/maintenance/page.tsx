@@ -23,6 +23,16 @@ export default function MaintenancePage() {
     { name: "Elena Vance", active: false }
   ]);
 
+  // Open schedule drawer if ?schedule=true query param is present
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("schedule") === "true") {
+        setDrawerOpen(true);
+      }
+    }
+  }, []);
+
   const schedules: MaintenanceSchedule[] = [
     {
       id: "AS-2044-X",

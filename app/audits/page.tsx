@@ -18,6 +18,16 @@ export default function AuditsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "history" | "schedule">("overview");
 
+  // Open audit drawer if ?start=true query param is present
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("start") === "true") {
+        setDrawerOpen(true);
+      }
+    }
+  }, []);
+
   const activeAudits: ActiveAudit[] = [
     {
       id: "AUD-2024-089",

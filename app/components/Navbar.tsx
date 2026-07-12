@@ -93,11 +93,11 @@ export default function Navbar() {
     { name: "Dashboard", href: "/dashboard", show: true },
     { name: "Organization", href: "/organization", show: isAdmin },
     { name: "Assets", href: "/assets", show: true },
-    { name: "Allocations", href: "/allocations", show: true },
-    { name: "Resources", href: "/resources", show: true },
+    { name: "Resource Booking", href: "/bookings", show: true },
     { name: "Maintenance", href: "/maintenance", show: true },
     { name: "Audits", href: "/audits", show: isAssetManager },
     { name: "Reports", href: "/reports", show: isDeptHead },
+    { name: "Settings", href: "/settings", show: true },
   ];
 
   return (
@@ -152,7 +152,10 @@ export default function Navbar() {
 
           {/* Sign Out */}
           <button
-            onClick={() => handleSignOut()}
+            onClick={async () => {
+              await handleSignOut();
+              window.location.href = "/login";
+            }}
             className="p-2 rounded-lg text-text-secondary hover:text-danger hover:bg-danger-light/50 transition-colors cursor-pointer"
             title="Sign Out"
           >

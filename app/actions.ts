@@ -111,7 +111,7 @@ export async function handleSignOut() {
   const cookieStore = await cookies();
   const auth = createAuthActions({ cookies: cookieStore });
   await auth.signOut();
-  redirect('/login');
+  return { success: true };
 }
 
 export async function initiateOAuth(provider: string) {

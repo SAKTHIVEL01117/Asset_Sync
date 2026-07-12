@@ -129,6 +129,16 @@ export default function AssetsPage() {
     void checkAuth();
   }, [router]);
 
+  // Open registration modal if ?register=true query param is present
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("register") === "true") {
+        setShowRegModal(true);
+      }
+    }
+  }, []);
+
   // Fetch all categories, employees, and assets
   const fetchData = async () => {
     setLoadingData(true);
